@@ -1,5 +1,7 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from flask.ext.sqlalchemy import SQLAlchemy
+import simplejson as json 
+import os
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/test.db'
@@ -22,27 +24,25 @@ def hello_world():
     if 'application/json' in request.headers.get('Content-Type'):
         data = request.get_json()
         if 'commits' in data.keys():
-            commits = data.get('commits')
-            last = commits[-1]
-            msg = last.get('message')
+            commit = data.get('head_commit')
+            msg = commit.get('message')
             if 'Submit test:' in msg:
-                content = []
+                content = {}
                 repo = data.get('repository')
-                repo_url = repo.get('html_url')
-                content.append(repo_url)
-                content.append(msg)
-                entry = RequestsDB('\n'.join(content))
+                content['repo_url'] = repo.get('html_url')
+                content['username'] = repo.get('owner').get('name')
+                content['message'] = msg
+                entry = RequestsDB(json.dumps(content))
                 db.session.add(entry)
                 db.session.commit()
         return jsonify(data), 200
     else:
         # Assume request from browser, show him last past requests
-        content = []
-        all = RequestsDB.query.all()
-        for e in all:
-            content.append(str(e))
-        return '\n'.join(content), 200
+        tests = []
+        for e in RequestsDB.query.all():
+            tests.append(json.loads(str(e)))
+        return render_template('tests.html', tests = tests)
 
 
 if __name__ == '__main__':
-    app.run()
+    app.run(host=os.getenv('IP', '0.0.0.0'), port=int(os.getenv('PORT', 8080)))
