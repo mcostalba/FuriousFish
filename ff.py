@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, render_template
 from flask.ext.sqlalchemy import SQLAlchemy
-import simplejson as json 
+import simplejson as json
 import os
 
 app = Flask(__name__)
@@ -26,11 +26,12 @@ def hello_world():
         if 'commits' in data.keys():
             commit = data.get('head_commit')
             msg = commit.get('message')
-            if 'Submit test:' in msg:
+            if '@submit' in msg:
                 content = {}
                 repo = data.get('repository')
                 content['repo_url'] = repo.get('html_url')
                 content['username'] = repo.get('owner').get('name')
+                content['sha'] = commit.get('id')
                 content['message'] = msg
                 entry = RequestsDB(json.dumps(content))
                 db.session.add(entry)
