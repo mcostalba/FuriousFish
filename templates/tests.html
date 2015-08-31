@@ -8,9 +8,9 @@
     <p><h2>List of webhooks events</h2></p>
     <ul>
     {% for test in tests %}
-       <li>Repo: <a href="{{ test.get('repo_url') }}" target="_blank">{{ test.get('repo_url') }}</a> <br>
-       Commit: <a href="{{ test.get('repo_url') }}/commit/{{ test.get('sha') }}" target="_blank">{{ test.get('sha') }}</a> <br>
-       Username: {{ test.get('username') }} <br>
+       <li>Username: {{ test.get('username') }}   Repo: <a href="{{ test.get('repo_url') }}" target="_blank">{{ test.get('repo_url') }}</a> <br><br>
+       <a href="{{ test.get('repo_url') }}/commit/{{ test.get('sha'   ) }}" target="_blank">commit</a> ({{ test.get('bench_head') }}) vs
+       <a href="{{ test.get('repo_url') }}/commit/{{ test.get('master') }}" target="_blank">master</a> ({{ test.get('bench_base') }}) <br>
        <pre>{{ test.get('message') }}</pre></li>
     {% endfor %}
     </ul>
