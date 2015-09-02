@@ -1,17 +1,11 @@
 from flask import Flask, request, jsonify, render_template, redirect, url_for
 from flask.ext.sqlalchemy import SQLAlchemy
-from flask_wtf import Form
-from wtforms import StringField, PasswordField, SubmitField, validators
-from wtforms.validators import DataRequired
 import simplejson as json
 import requests
 import os
-import traceback
-import sys
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/test.db'
-app.config['SECRET_KEY'] = 'c7449f4339b26d' # Used by Form as csrf protection
 db = SQLAlchemy(app)
 
 
@@ -28,7 +22,7 @@ class RequestsDB(db.Model):
 class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key = True)
-    username = db.Column(db.String(50))
+    username = db.Column(db.String(50), unique=True)
     password = db.Column(db.String(50))
     repo_url = db.Column(db.String(50))
 
@@ -36,13 +30,6 @@ class User(db.Model):
         self.username = username
         self.password = password
         self.repo_url = repo_url
-
-
-class RegistrationForm(Form):
-    username = StringField(validators = [DataRequired])
-    repo_url = StringField(validators = [DataRequired])
-    password = PasswordField(validators = [DataRequired])
-    submit = SubmitField('Submit')
 
 
 def find_bench(commits):
@@ -62,7 +49,7 @@ def find_bench(commits):
 
 @app.route('/new', methods=['POST'])
 def new():
-    """Create a new test upon a POST request from GitHub
+    """Create a new test upon receiving a POST request from GitHub's webhook
     """
     if 'application/json' in request.headers.get('Content-Type'):
         data = request.get_json()
@@ -110,13 +97,18 @@ def root():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    form = RegistrationForm()
-    if form.validate_on_submit():
-        user = User(form.username.data, form.password.data, form.repo_url.data)
-        db.session.add(user)
-        db.session.commit()
+    """Register a new user
+
+    Ask for the minimal info to activate the webhook on GitHub and to
+    login into fishtest, this is required to submit the test.
+    """
+    if request.method == 'POST':
+        form = request.form
+        if User.query.filter_by(username=form['username']) is None:
+            db.session.add(User(form['username'], form['password'], form['repo_url']))
+            db.session.commit()
         return redirect(url_for('root'))
-    return render_template('register.html', form = form)
+    return render_template('register.html')
 
 
 if __name__ == '__main__':

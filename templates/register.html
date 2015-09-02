@@ -5,20 +5,23 @@
 {% block body %}
   <h3>Register</h3>
 
-  <form>
+  <form method="POST">
+    <div class="col-sm-1"></div>
+    <div class="col-sm-4">
       <div class="form-group">
-          <label for={{ form.username.id }} class="control-label">Fishtest username</label>
-          <input type='text'  class="form-control" id={{ form.username.id }}>
+          <label for='username' class="control-label">Fishtest username</label>
+          <input type='text' class="form-control" name="username" required>
       </div>
       <div class="form-group">
-          <label for={{ form.password.id }} class="control-label">Fishtest password</label>
-          <input type='password'  class="form-control" id={{ form.password.id }}>
+          <label for='password' class="control-label">Fishtest password</label>
+          <input type='password' class="form-control" name="password" required>
       </div>
       <div class="form-group">
-          <label for={{ form.username.id }} class="control-label">GitHub repository url</label>
-          <input type='text'  class="form-control" id={{ form.username.id }}>
+          <label for='repo_url' class="control-label">GitHub repository url</label>
+          <input type='text' class="form-control" name="repo_url" placeholder="https://github.com/xxxxx/Stockfish" required>
       </div>
       <input class="btn btn-default" type="submit" value="Submit">
+    </div>
   </form>
 
 {% endblock %}
