@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Register{% endblock %}
+
+{% block body %}
+  <h3>Register</h3>
+
+  <form>
+      <div class="form-group">
+          <label for={{ form.username.id }} class="control-label">Fishtest username</label>
+          <input type='text'  class="form-control" id={{ form.username.id }}>
+      </div>
+      <div class="form-group">
+          <label for={{ form.password.id }} class="control-label">Fishtest password</label>
+          <input type='password'  class="form-control" id={{ form.password.id }}>
+      </div>
+      <div class="form-group">
+          <label for={{ form.username.id }} class="control-label">GitHub repository url</label>
+          <input type='text'  class="form-control" id={{ form.username.id }}>
+      </div>
+      <input class="btn btn-default" type="submit" value="Submit">
+  </form>
+
+{% endblock %}

@@ -1,11 +1,17 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, redirect, url_for
 from flask.ext.sqlalchemy import SQLAlchemy
+from flask_wtf import Form
+from wtforms import StringField, PasswordField, SubmitField, validators
+from wtforms.validators import DataRequired
 import simplejson as json
 import requests
 import os
+import traceback
+import sys
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/test.db'
+app.config['SECRET_KEY'] = 'c7449f4339b26d' # Used by Form as csrf protection
 db = SQLAlchemy(app)
 
 
@@ -19,14 +25,36 @@ class RequestsDB(db.Model):
     def __repr__(self):
         return self.request
 
+class User(db.Model):
+    __tablename__ = 'users'
+    id = db.Column(db.Integer, primary_key = True)
+    username = db.Column(db.String(50))
+    password = db.Column(db.String(50))
+    repo_url = db.Column(db.String(50))
+
+    def __init__(self, username, password, repo_url):
+        self.username = username
+        self.password = password
+        self.repo_url = repo_url
+
+
+class RegistrationForm(Form):
+    username = StringField(validators = [DataRequired])
+    repo_url = StringField(validators = [DataRequired])
+    password = PasswordField(validators = [DataRequired])
+    submit = SubmitField('Submit')
+
+
 def find_bench(commits):
-    """Find the newest commit message with a bench number, commits are ordered
-       from oldest to newest"""
+    """Find the first commit message with a bench number
+
+    Commits are ordered from oldest to newest, we return the bench number
+    of the newest we find.
+    """
     for c in reversed(commits):
-        commit = c['commit']
-        msg = commit['message'].upper()
+        msg = c['commit']['message'].upper()
         if '\nBENCH:' in msg:
-            bench = msg.split('\nBENCH:', 1)[1].splitlines(False)[0].strip()
+            bench = msg.split('\nBENCH:', 1)[1].splitlines()[0].strip()
             if bench.isdigit():
                 return bench
     return None
@@ -34,13 +62,14 @@ def find_bench(commits):
 
 @app.route('/new', methods=['POST'])
 def new():
-    """Create a new test upon a POST request from GitHub"""
+    """Create a new test upon a POST request from GitHub
+    """
     if 'application/json' in request.headers.get('Content-Type'):
         data = request.get_json()
         if 'commits' in data.keys():
             commit = data.get('head_commit')
             msg = commit.get('message')
-            if '@submit' in msg:
+            if '\n@submit' in msg:
                 repo = data.get('repository')
                 content = {}
                 content['repo_url'] = repo.get('html_url')
@@ -50,21 +79,22 @@ def new():
 
                 # Fetch until ExtraCnt commits before master to try hard to find
                 # a functional change with corresponding bench number.
-                ExtraCnt = 5
+                ExtraCnt = 7
 
                 compare_url = repo.get('compare_url')
-                cmd = compare_url.format(base = 'official~' + str(ExtraCnt + 1),
+                cmd = compare_url.format(base = 'master~' + str(ExtraCnt + 1),
                                          head = content['sha'])
-                req = requests.get(cmd).json()
+
+                req = requests.get(cmd).json() # Request GitHub here
+
                 commits = req['commits']
                 bench_head = find_bench(commits)
                 bench_base = find_bench(commits[:ExtraCnt + 1])
-                if bench_head is not None and bench_base is not None:
+                if bench_head and bench_base:
                     content['master'] = commits[ExtraCnt]['sha']
                     content['bench_head'] = bench_head
                     content['bench_base'] = bench_base
-                    entry = RequestsDB(json.dumps(content))
-                    db.session.add(entry)
+                    db.session.add(RequestsDB(json.dumps(content)))
                     db.session.commit()
                     return jsonify(content), 200
     return 'Unable to parse the request', 404
@@ -72,11 +102,21 @@ def new():
 
 @app.route('/', methods=['GET'])
 def root():
-    """Show the list of submitted tests"""
-    tests = []
-    for e in RequestsDB.query.all():
-        tests.append(json.loads(str(e)))
+    """Show the list of submitted tests
+    """
+    tests = [json.loads(str(e)) for e in RequestsDB.query.all()]
     return render_template('tests.html', tests = tests)
+
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    form = RegistrationForm()
+    if form.validate_on_submit():
+        user = User(form.username.data, form.password.data, form.repo_url.data)
+        db.session.add(user)
+        db.session.commit()
+        return redirect(url_for('root'))
+    return render_template('register.html', form = form)
 
 
 if __name__ == '__main__':
