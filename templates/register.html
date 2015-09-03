@@ -9,19 +9,50 @@
     <div class="col-sm-1"></div>
     <div class="col-sm-4">
       <div class="form-group">
-          <label for='username' class="control-label">Fishtest username</label>
-          <input type='text' class="form-control" name="username" required>
+          <label for='username' class="control-label">Username</label>
+          <input type='text' class="form-control" name="username" id="username" required>
+          <p class="help-block">Insert GitHub username here. Must be the same username you use in Fishtest</p>
+      </div>
+      <div class="form-group">
+          <label for='repo_url' class="control-label">Repository</label>
+          <select class="form-control" name="repo_url" id="repo_url_select" required></select>
+          <p class="help-block">Select the GitHub repository you use for pushing tests. First insert username</p>
       </div>
       <div class="form-group">
           <label for='password' class="control-label">Fishtest password</label>
           <input type='password' class="form-control" name="password" required>
+          <p class="help-block">Password is needed to login to Fishtest and submit tests for you</p>
       </div>
-      <div class="form-group">
-          <label for='repo_url' class="control-label">GitHub repository url</label>
-          <input type='text' class="form-control" name="repo_url" placeholder="https://github.com/xxxxx/Stockfish" required>
-      </div>
+
       <input class="btn btn-default" type="submit" value="Submit">
     </div>
   </form>
 
+  <script>
+   function httpGet(url)
+   {
+      var xmlHttp = new XMLHttpRequest();
+      xmlHttp.open( "GET", url, false ); // Synchronous request
+      xmlHttp.send( null );
+      return xmlHttp.responseText;
+   }
+
+   $( "#username" ).change(function( eventObject ) {
+
+   /* Upon changing the username, retrieve corresponding
+      repos on GitHub and populate the repo_url select field. */
+
+      var sel = $( '#repo_url_select' ).empty();
+
+      var url = 'https://api.github.com/users/' + $.trim($( '#username' ).val()) + '/repos';
+      var r = JSON.parse(httpGet(url)); // Call GitHub here
+
+      for (var i = 0; i < r.length; i++) {
+        sel.append($('<option>', {
+          value: r[i].owner.html_url + '/' + r[i].name,
+          text : r[i].name
+        }));
+      }
+   });
+  </script>
 {% endblock %}
