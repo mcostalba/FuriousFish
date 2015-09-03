@@ -3,6 +3,7 @@ from flask.ext.sqlalchemy import SQLAlchemy
 import simplejson as json
 import requests
 import os
+import fishtest
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/test.db'
@@ -102,14 +103,25 @@ def register():
     Ask for the minimal info to activate the webhook on GitHub and to
     login into fishtest, this is required to submit the test.
     """
+    error = ''
     if request.method == 'POST':
         form = request.form
-        if User.query.filter_by(username=form['username']) is None:
-            db.session.add(User(form['username'], form['password'], form['repo_url']))
-            db.session.commit()
-        return redirect(url_for('root'))
-    return render_template('register.html')
+
+        # Fields are already half validated in the client, in particular
+        # username and repo_url should be already verified against GitHub.
+        if User.query.filter_by(username = form['username']).count():
+            error = "Username already existing"
+
+        elif not fishtest.login(form['username'], form['password']):
+            error = "Cannot login into fishtest. Invalid password?"
+
+        else:
+            #db.session.add(User(form['username'], form['password'], form['repo_url']))
+            #db.session.commit()
+            return redirect(url_for('root'))
+
+    return render_template('register.html', error = error)
 
 
 if __name__ == '__main__':
-    app.run(host=os.getenv('IP', '0.0.0.0'), port=int(os.getenv('PORT', 8080)))
+    app.run(debug=True, host=os.getenv('IP', '0.0.0.0'), port=int(os.getenv('PORT', 8080)))
