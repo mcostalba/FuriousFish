@@ -10,10 +10,32 @@
     <title>{% block title %}{% endblock %} - FuriousFish</title>
 </head>
 
+{% block alert %}{% endblock %}
+
+<nav class="navbar navbar-default">
+  <div class="container-fluid">
+    <div class="navbar-header">
+      <h3>{% block header %}{% endblock %}</h3>
+    </div>
+  </div>
+</nav>
+
 <body>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
-    {% block body %}
-    {% endblock %}
+
+    <div class="container-fluid">
+      <div class="row">
+        <div class="col-sm-1">
+          <ul id="sidebar" class="nav nav-stacked affix">
+            <li><a href="{{ url_for('root') }}">Tests</a></li>
+            <li><a href="{{ url_for('register') }}">Register</a></li>
+          </ul>
+        </div>
+        <div class="col-sm-6">
+          {% block body %}{% endblock %}
+        </div>
+      </div>
+    </div>
 </body>
 </html>

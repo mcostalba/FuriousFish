@@ -1,12 +1,14 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for
+from flask import Flask, request, session, jsonify, render_template, redirect, url_for
 from flask.ext.sqlalchemy import SQLAlchemy
+from fishtest import Fishtest
 import simplejson as json
 import requests
 import os
-import fishtest
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/test.db'
+app.config['SESSION_TYPE'] = 'filesystem'
+app.secret_key = 'super secret key' # Needed by session management
 db = SQLAlchemy(app)
 
 
@@ -92,8 +94,12 @@ def new():
 def root():
     """Show the list of submitted tests
     """
+    username = session.get('username')
+    if username:
+        session['username'] = '' # Show congratulations alert only once
+
     tests = [json.loads(str(e)) for e in RequestsDB.query.all()]
-    return render_template('tests.html', tests = tests)
+    return render_template('tests.html', tests = tests, username = username)
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -112,12 +118,13 @@ def register():
         if User.query.filter_by(username = form['username']).count():
             error = "Username already existing"
 
-        elif not fishtest.login(form['username'], form['password']):
+        elif not Fishtest().login(form['username'], form['password']):
             error = "Cannot login into fishtest. Invalid password?"
 
         else:
             #db.session.add(User(form['username'], form['password'], form['repo_url']))
             #db.session.commit()
+            session['username'] = form['username']
             return redirect(url_for('root'))
 
     return render_template('register.html', error = error)

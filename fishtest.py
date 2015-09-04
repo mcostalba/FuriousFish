@@ -18,19 +18,26 @@ def get_test_info(msg):
     return info[0].strip()
 
 
-def login(username, password):
-    br = Browser()
-    br.open('http://tests.stockfishchess.org/tests/run')
-    br.select_form(nr = 0)
-    br["username"] = username
-    br["password"] = password
-    br.submit()
-    br.select_form(nr = 0)
-    try:
-        br["test_type"]
-    except ControlNotFoundError:
-        return False
-    return True
+class Fishtest():
+
+    run_url = 'http://tests.stockfishchess.org/tests/run'
+
+    def __init__(self):
+        self.browser = Browser()
+
+    def login(self, username, password):
+        br = self.browser
+        br.open(self.run_url)
+        br.select_form(nr = 0)
+        br["username"] = username
+        br["password"] = password
+        br.submit()
+        br.select_form(nr = 0)
+        try:
+           br["test_type"]
+        except ControlNotFoundError:
+           return False
+        return True
 
 
 def forge_post():
