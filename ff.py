@@ -12,34 +12,44 @@ os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 app = Flask(__name__)
 
 app.secret_key = os.urandom(24) # Needed by session management
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/test.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/ff.db'
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['GITHUB_CLIENT_ID'] = os.environ['GITHUB_CLIENT_ID']
 app.config['GITHUB_CLIENT_SECRET'] = os.environ['GITHUB_CLIENT_SECRET']
 
 db = SQLAlchemy(app)
 
-class RequestsDB(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    request = db.Column(db.String(300), unique=False)
-
-    def __init__(self, request):
-        self.request = request
-
-    def __repr__(self):
-        return self.request
-
-class User(db.Model):
+class UsersDB(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key = True)
-    username = db.Column(db.String(50), unique=True)
-    password = db.Column(db.String(50))
-    repo_url = db.Column(db.String(50))
+    username     = db.Column(db.String(50), unique=True)
+    fishtest_pwd = db.Column(db.String(50))
+    github_repo  = db.Column(db.String(50))
 
     def __init__(self, username, password, repo):
-        self.username = username
-        self.password = password
-        self.repo_url = repo
+        self.username     = username
+        self.fishtest_pwd = password
+        self.github_repo  = repo
+
+    def __repr__(self):
+        return '<User %r>' % self.username
+
+class TestsDB(db.Model):
+    __tablename__ = 'tests'
+    id = db.Column(db.Integer, primary_key=True)
+    state = db.Column(db.String(50))
+    data  = db.Column(db.String(300))
+
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    user = db.relationship('UsersDB', backref=db.backref('tests', lazy='dynamic'))
+
+    def __init__(self, data, user):
+        self.state = 'new'
+        self.data = data
+        self.user = user
+
+    def __repr__(self):
+        return '<Test %r>' % self.data
 
 
 def find_bench(commits):
@@ -65,7 +75,7 @@ def root():
     if congrats:
         session.pop('congrats') # Show congratulations alert only once
 
-    tests = [json.loads(str(e)) for e in RequestsDB.query.all()]
+    tests = [json.loads(str(e.data)) for e in TestsDB.query.all()]
     return render_template('tests.html', tests = tests, congrats = congrats)
 
 
@@ -73,40 +83,54 @@ def root():
 def new():
     """Create a new test upon receiving a POST request from GitHub's webhook
     """
-    if 'application/json' in request.headers.get('Content-Type'):
-        data = request.get_json()
-        if 'commits' in data.keys():
-            commit = data.get('head_commit')
-            msg = commit.get('message')
-            if '\n@submit' in msg:
-                repo = data.get('repository')
-                content = {}
-                content['repo_url'] = repo.get('html_url')
-                content['username'] = repo.get('owner').get('name')
-                content['sha'] = commit.get('id')
-                content['message'] = msg
 
-                # Fetch until ExtraCnt commits before master to try hard to find
-                # a functional change with corresponding bench number.
-                ExtraCnt = 7
+    #TODO Validate payload (https://developer.github.com/webhooks/securing/#validating-payloads-from-github)
 
-                compare_url = repo.get('compare_url')
-                cmd = compare_url.format(base = 'master~' + str(ExtraCnt + 1),
-                                         head = content['sha'])
+    if 'application/json' not in request.headers.get('Content-Type'):
+        return 'Not a JSON post', 404
 
-                req = requests.get(cmd).json() # Request GitHub here
+    data = request.get_json()
+    if 'head_commit' not in data.keys():
+        return 'Missing commits data', 404
 
-                commits = req['commits']
-                bench_head = find_bench(commits)
-                bench_base = find_bench(commits[:ExtraCnt + 1])
-                if bench_head and bench_base:
-                    content['master'] = commits[ExtraCnt]['sha']
-                    content['bench_head'] = bench_head
-                    content['bench_base'] = bench_base
-                    db.session.add(RequestsDB(json.dumps(content)))
-                    db.session.commit()
-                    return jsonify(content), 200
-    return 'Unable to parse the request', 404
+    commit = data.get('head_commit')
+    msg = commit.get('message')
+    if not msg or '\n@submit' not in msg:
+        return 'Nothing to do here', 404
+
+    repo = data.get('repository')
+    content = {}
+    content['username'] = repo.get('owner').get('name')
+    user = UsersDB.query.filter_by(username=content['username']).first()
+    if not user:
+        return 'Unknown username', 404
+
+    content['repo_url'] = repo.get('html_url')
+    content['sha'] = commit.get('id')
+    content['message'] = msg
+
+    # Fetch until ExtraCnt commits before master to try hard to find
+    # a functional change with corresponding bench number.
+    ExtraCnt = 7
+
+    compare_url = repo.get('compare_url')
+    cmd = compare_url.format(base = 'master~' + str(ExtraCnt + 1),
+                             head = content['sha'])
+
+    req = requests.get(cmd).json()
+
+    commits = req['commits']
+    bench_head = find_bench(commits)
+    bench_base = find_bench(commits[:ExtraCnt + 1])
+    if not bench_head or not bench_base:
+        return 'Cannot find bench numbers', 404
+
+    content['master'] = commits[ExtraCnt]['sha']
+    content['bench_head'] = bench_head
+    content['bench_base'] = bench_base
+    db.session.add(TestsDB(json.dumps(content), user))
+    db.session.commit()
+    return jsonify(content), 200
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -122,7 +146,7 @@ def register():
 
         # Fields are already half validated in the client, in particular
         # username and repo have been already verified against GitHub.
-        if User.query.filter_by(username = form['username']).count():
+        if UsersDB.query.filter_by(username = form['username']).count():
             error = "Username already existing"
 
         elif not Fishtest().login(form['username'], form['password']):
@@ -191,7 +215,7 @@ def set_hook():
         if 'test_url' not in r:
             return render_template('register.html', error = 'Cannot set the webhook on GitHub')
 
-    db.session.add(User(**session['user']))
+    db.session.add(UsersDB(**session['user']))
     db.session.commit()
     session['congrats'] = True
     return redirect(url_for('root'))
