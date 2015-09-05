@@ -6,10 +6,10 @@
 
 {% block alert %}
   {% if error %}
-  <div class="alert alert-danger alert-dismissible" role="alert">
-    <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-    <strong>Registration failed!</strong> {{ error }}
-  </div>
+    <div class="alert alert-danger alert-dismissible" role="alert">
+      <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+      <strong>Registration failed!</strong> {{ error }}
+    </div>
   {% endif %}
 {% endblock %}
 
@@ -22,8 +22,8 @@
           <p class="help-block">Insert GitHub username here. Must be the same username you use in Fishtest</p>
       </div>
       <div class="form-group">
-          <label for='repo_url' class="control-label">Repository</label>
-          <select class="form-control" name="repo_url" id="repo_url_select" required></select>
+          <label for='repo' class="control-label">Repository</label>
+          <select class="form-control" name="repo" id="repo_select" required></select>
           <p class="help-block">Select the GitHub repository you use for pushing tests. First insert username</p>
       </div>
       <div class="form-group">
@@ -49,16 +49,16 @@
    $( "#username" ).change(function( eventObject ) {
 
    /* Upon changing the username, retrieve corresponding
-      repos on GitHub and populate the repo_url select field. */
+      repos on GitHub and populate the repo_select field. */
 
-      var sel = $( '#repo_url_select' ).empty();
+      var sel = $( '#repo_select' ).empty();
 
       var url = 'https://api.github.com/users/' + $.trim($( '#username' ).val()) + '/repos';
       var r = JSON.parse(httpGet(url)); // Call GitHub here
 
       for (var i = 0; i < r.length; i++) {
         sel.append($('<option>', {
-          value: r[i].owner.html_url + '/' + r[i].name,
+          value: r[i].name,
           text : r[i].name
         }));
       }
