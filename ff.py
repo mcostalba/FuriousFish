@@ -36,10 +36,10 @@ class User(db.Model):
     password = db.Column(db.String(50))
     repo_url = db.Column(db.String(50))
 
-    def __init__(self, username, password, repo_url):
+    def __init__(self, username, password, repo):
         self.username = username
         self.password = password
-        self.repo_url = repo_url
+        self.repo_url = repo
 
 
 def find_bench(commits):
@@ -55,6 +55,18 @@ def find_bench(commits):
             if bench.isdigit():
                 return bench
     return None
+
+
+@app.route('/', methods=['GET'])
+def root():
+    """Show the list of submitted tests
+    """
+    congrats = session.get('congrats')
+    if congrats:
+        session.pop('congrats') # Show congratulations alert only once
+
+    tests = [json.loads(str(e)) for e in RequestsDB.query.all()]
+    return render_template('tests.html', tests = tests, congrats = congrats)
 
 
 @app.route('/new', methods=['POST'])
@@ -97,18 +109,6 @@ def new():
     return 'Unable to parse the request', 404
 
 
-@app.route('/', methods=['GET'])
-def root():
-    """Show the list of submitted tests
-    """
-    congrats = session.get('congrats')
-    if congrats:
-        session.pop('congrats') # Show congratulations alert only once
-
-    tests = [json.loads(str(e)) for e in RequestsDB.query.all()]
-    return render_template('tests.html', tests = tests, congrats = congrats)
-
-
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     """Register a new user
@@ -129,9 +129,9 @@ def register():
             error = "Cannot login into fishtest. Invalid password?"
 
         else:
-            session['user'] = dict(username = form['username'],
-                                   password = form['password'],
-                                   repo     = form['repo'])
+            session['user'] = { 'username' : form['username'],
+                                'password' : form['password'],
+                                'repo'     : form['repo'] }
 
             # Redirect to GitHub where user will be requested to authorize us to
             # create a new webhook and then will be redirected to github_callback.
@@ -191,8 +191,8 @@ def set_hook():
         if 'test_url' not in r:
             return render_template('register.html', error = 'Cannot set the webhook on GitHub')
 
-    #db.session.add(*session['User'])
-    #db.session.commit()
+    db.session.add(User(**session['user']))
+    db.session.commit()
     session['congrats'] = True
     return redirect(url_for('root'))
 
