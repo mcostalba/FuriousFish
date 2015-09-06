@@ -14,18 +14,26 @@
 {% endblock %}
 
 {% block body %}
-  {% for e in tests %}
-  <div class="row">
-    <div class="col-sm-10">
-      <a href="{{ e.get('repo_url') }}/commit/{{ e.get('sha'   )[:10] }}" target="_blank">{{ e.get('ref') }}</a>({{ e.get('bench_head') }}) vs
-      <a href="{{ e.get('repo_url') }}/commit/{{ e.get('master')[:10] }}" target="_blank">master</a>({{ e.get('bench_base') }}) on
-      <a href="{{ e.get('repo_url') }}" target="_blank">{{ e.get('repo_url') }}</a></div>
-    <div class="col-sm-2">
-      <p class="text-right"><a href="{{ e.get('repo_url') }}/compare/{{ e.get('master')[:10] }}...{{ e.get('sha')[:10] }}" target="_blank">diff</a></p>
-    </div>
-  </div>
-  <div class="row">
-    <div class="col-sm-12"><pre>{{ e.get('message') }}</pre></div>
-  </div>
-  {% endfor %}
+<table class="table table-striped">
+  <thead>
+    <tr>
+      <th>User</th>
+      <th>Test</th>
+      <th>Info</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for e in tests %}
+    <tr>
+      <td>{{ e.get('username')  }}</td>
+      <td>
+          <a href="{{ e.get('repo_url') }}/commit/{{ e.get('sha'   )[:10] }}" target="_blank">{{ e.get('ref') }}</a> (bench: {{ e.get('bench_head') }}) vs
+          <a href="{{ e.get('repo_url') }}/commit/{{ e.get('master')[:10] }}" target="_blank">master</a> (bench: {{ e.get('bench_base') }})
+          <a href="{{ e.get('repo_url') }}/compare/{{ e.get('master')[:10] }}...{{ e.get('sha')[:10] }}" target="_blank">diff</a>
+      </td>
+      <td>{{ e.get('message') }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
 {% endblock %}

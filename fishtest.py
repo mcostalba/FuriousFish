@@ -1,23 +1,6 @@
 from mechanize import Browser, ControlNotFoundError
 
 
-def get_test_info(msg):
-    """Extract test info from commit message
-
-    First look for text between {...} parenthesis after the @submit marker, if
-    not found fallback on the commit title.
-
-    We assume the message has always a @submit marker.
-    """
-    s = msg.split('\n@submit', 1)
-    info = [p.split('}')[0] for p in s[1].split('{') if '}' in p and s[1] != p]
-    if not info:
-        info = [p for p in s[0].splitlines() if p]
-        if not info:
-            return None
-    return info[0].strip()
-
-
 class Fishtest():
 
     run_url = 'http://tests.stockfishchess.org/tests/run'

@@ -66,6 +66,23 @@ def find_bench(commits):
     return None
 
 
+def extract_info(msg):
+    """Extract test info from commit message
+
+    First look for text between {...} parenthesis after the @submit marker, if
+    not found fallback on the commit title.
+
+    We assume the message has always a @submit marker.
+    """
+    s = msg.split('\n@submit', 1)
+    info = [p.split('}')[0] for p in s[1].split('{') if '}' in p and s[1] != p]
+    if not info:
+        info = [p for p in s[0].splitlines() if p]
+        if not info:
+            return None
+    return info[0].strip()
+
+
 @app.route('/', methods=['GET'])
 def root():
     """Show the list of submitted tests
@@ -76,6 +93,7 @@ def root():
 
     tests = [json.loads(str(e.data)) for e in TestsDB.query.all()]
     return render_template('tests.html', tests = tests, congrats = congrats)
+
 
 @app.route('/users', methods=['GET'])
 def users():
@@ -111,12 +129,15 @@ def new():
 
     content = { 'ref'      : data['ref'].split('/')[-1],
                 'repo_url' : repo['html_url'],
-                'sha'      : commit['id'],
-                'message'  : commit['message'],
+                'sha'      : commit['id']
               }
 
-    if '\n@submit' not in content['message']:
+    if '\n@submit' not in commit['message']:
         return 'Nothing to do here', 200      # Not an error
+
+    content['message'] = extract_info(commit['message'])
+    if not content['message']:
+        return 'Missing valid test info', 404
 
     content['username'] = repo['owner'].get('name')
     user = UsersDB.query.filter_by(username = content['username']).first()
@@ -167,7 +188,8 @@ def register():
         else:
             session['user'] = { 'username' : form['username'],
                                 'password' : form['password'],
-                                'repo'     : form['repo'] }
+                                'repo'     : form['repo']
+                              }
 
             # Redirect to GitHub where user will be requested to authorize us to
             # create a new webhook and then will be redirected to github_callback.
