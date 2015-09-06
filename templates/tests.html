@@ -17,7 +17,7 @@
   {% for e in tests %}
   <div class="row">
     <div class="col-sm-10">
-      <a href="{{ e.get('repo_url') }}/commit/{{ e.get('sha'   )[:10] }}" target="_blank">commit</a>({{ e.get('bench_head') }}) vs
+      <a href="{{ e.get('repo_url') }}/commit/{{ e.get('sha'   )[:10] }}" target="_blank">{{ e.get('ref') }}</a>({{ e.get('bench_head') }}) vs
       <a href="{{ e.get('repo_url') }}/commit/{{ e.get('master')[:10] }}" target="_blank">master</a>({{ e.get('bench_base') }}) on
       <a href="{{ e.get('repo_url') }}" target="_blank">{{ e.get('repo_url') }}</a></div>
     <div class="col-sm-2">

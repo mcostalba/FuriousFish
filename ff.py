@@ -93,45 +93,51 @@ def new():
     #TODO Validate payload (https://developer.github.com/webhooks/securing/#validating-payloads-from-github)
 
     if 'application/json' not in request.headers.get('Content-Type'):
-        return 'Not a JSON post', 404
+        return 'Content-Type is not json', 404
 
     data = request.get_json()
-    if 'head_commit' not in data.keys():
-        return 'Missing commits data', 404
 
-    commit = data.get('head_commit')
-    msg = commit.get('message')
-    if not msg or '\n@submit' not in msg:
-        return 'Nothing to do here', 404
+    if not all(k in data.keys() for k in ['ref', 'head_commit', 'repository']):
+        return 'Cannot find all the needed data fields', 404
 
-    repo = data.get('repository')
-    content = {}
-    content['username'] = repo.get('owner').get('name')
-    user = UsersDB.query.filter_by(username=content['username']).first()
+    repo   = data['repository']
+    commit = data['head_commit']
+
+    if not all(k in repo.keys() for k in ['owner', 'html_url', 'compare_url']):
+        return 'Cannot find all the needed repository fields', 404
+
+    if not all(k in commit.keys() for k in ['id', 'message']):
+        return 'Cannot find all the needed head_commit fields', 404
+
+    content = { 'ref'      : data['ref'].split('/')[-1],
+                'repo_url' : repo['html_url'],
+                'sha'      : commit['id'],
+                'message'  : commit['message'],
+              }
+
+    if '\n@submit' not in content['message']:
+        return 'Nothing to do here', 200      # Not an error
+
+    content['username'] = repo['owner'].get('name')
+    user = UsersDB.query.filter_by(username = content['username']).first()
     if not user:
         return 'Unknown username', 404
-
-    content['repo_url'] = repo.get('html_url')
-    content['sha'] = commit.get('id')
-    content['message'] = msg
 
     # Fetch until ExtraCnt commits before master to try hard to find
     # a functional change with corresponding bench number.
     ExtraCnt = 7
 
-    compare_url = repo.get('compare_url')
-    cmd = compare_url.format(base = 'master~' + str(ExtraCnt + 1),
-                             head = content['sha'])
-
+    cmd = repo['compare_url'].format(base = 'master~' + str(ExtraCnt + 1),
+                                     head = content['sha'])
     req = requests.get(cmd).json()
 
-    commits = req['commits']
+    commits = req.get('commits')
     bench_head = find_bench(commits)
     bench_base = find_bench(commits[:ExtraCnt + 1])
     if not bench_head or not bench_base:
         return 'Cannot find bench numbers', 404
 
-    content['master'] = commits[ExtraCnt]['sha']
+    content['master'] = commits[ExtraCnt].get('sha')
     content['bench_head'] = bench_head
     content['bench_base'] = bench_base
     db.session.add(TestsDB(json.dumps(content), user))
