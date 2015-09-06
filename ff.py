@@ -22,34 +22,33 @@ db = SQLAlchemy(app)
 class UsersDB(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key = True)
-    username     = db.Column(db.String(50), unique=True)
+    username     = db.Column(db.String(50), unique = True)
     fishtest_pwd = db.Column(db.String(50))
     github_repo  = db.Column(db.String(50))
+
+    tests = db.relationship("TestsDB",
+                            lazy = 'dynamic',
+                         #   order_by = id,
+                            cascade = 'all, delete, delete-orphan',
+                            backref = db.backref('user', lazy = 'joined'))
 
     def __init__(self, username, password, repo):
         self.username     = username
         self.fishtest_pwd = password
         self.github_repo  = repo
 
-    def __repr__(self):
-        return '<User %r>' % self.username
 
 class TestsDB(db.Model):
     __tablename__ = 'tests'
     id = db.Column(db.Integer, primary_key=True)
-    state = db.Column(db.String(50))
-    data  = db.Column(db.String(300))
-
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    user = db.relationship('UsersDB', backref=db.backref('tests', lazy='dynamic'))
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable = False)
+    state   = db.Column(db.String(50))
+    data    = db.Column(db.String(300))
 
     def __init__(self, data, user):
         self.state = 'new'
         self.data = data
         self.user = user
-
-    def __repr__(self):
-        return '<Test %r>' % self.data
 
 
 def find_bench(commits):
@@ -77,6 +76,13 @@ def root():
 
     tests = [json.loads(str(e.data)) for e in TestsDB.query.all()]
     return render_template('tests.html', tests = tests, congrats = congrats)
+
+@app.route('/users', methods=['GET'])
+def users():
+    """Show the list of registered users
+    """
+    users = [{'user' : e.username, 'count' : e.tests.count()} for e in UsersDB.query.all()]
+    return render_template('users.html', users = users)
 
 
 @app.route('/new', methods=['POST'])

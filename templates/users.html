@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Users{% endblock %}
+
+{% block header %}Users{% endblock %}
+
+{% block body %}
+<table class="table table-striped">
+  <thead>
+    <tr>
+      <th>User</th>
+      <th>Tests submitted</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for u in users %}
+    <tr>
+      <td>{{ u.user  }}</td>
+      <td>{{ u.count }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
