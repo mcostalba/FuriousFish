@@ -1,5 +1,12 @@
-mechanize == 0.2.5
-requests == 2.7.0
-requests_oauthlib == 0.5.0
-Flask == 0.10.1
-simplejson == 3.8.0
+Flask==0.10.1
+Flask-SQLAlchemy==2.0
+itsdangerous==0.24
+Jinja2==2.8
+MarkupSafe==0.23
+mechanize==0.2.5
+oauthlib==1.0.3
+requests==2.7.0
+requests-oauthlib==0.5.0
+simplejson==3.8.0
+SQLAlchemy==1.0.8
+Werkzeug==0.10.4
