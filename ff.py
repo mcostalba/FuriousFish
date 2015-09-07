@@ -91,7 +91,8 @@ def root():
     if congrats:
         session.pop('congrats') # Show congratulations alert only once
 
-    tests = [json.loads(str(e.data)) for e in TestsDB.query.all()]
+    tests = TestsDB.query.order_by(TestsDB.id.desc()).all()
+    tests = [json.loads(str(e.data)) for e in tests]
     return render_template('tests.html', tests = tests, congrats = congrats)
 
 
@@ -99,7 +100,8 @@ def root():
 def users():
     """Show the list of registered users
     """
-    users = [{'user' : e.username, 'count' : e.tests.count()} for e in UsersDB.query.all()]
+    users = UsersDB.query.order_by(UsersDB.username).all()
+    users = [{'user' : e.username, 'count' : e.tests.count()} for e in users]
     return render_template('users.html', users = users)
 
 
@@ -110,62 +112,56 @@ def new():
 
     #TODO Validate payload (https://developer.github.com/webhooks/securing/#validating-payloads-from-github)
 
-    if 'application/json' not in request.headers.get('Content-Type'):
+    try:
+        data = request.get_json()
+    except:
         return 'Content-Type is not json', 404
 
-    data = request.get_json()
+    try:
+        repo   = data['repository']
+        commit = data['head_commit']
+        content = { 'ref'      : data['ref'].split('/')[-1],
+                    'repo_url' : repo['html_url'],
+                    'sha'      : commit['id'],
+                    'master'   : 'master'     # We assume base branch ref is master
+                  }
 
-    if not all(k in data.keys() for k in ['ref', 'head_commit', 'repository']):
-        return 'Cannot find all the needed data fields', 404
+        if '\n@submit' not in commit['message']:
+            return 'Nothing to do here', 200      # Not an error
 
-    repo   = data['repository']
-    commit = data['head_commit']
+        content['message'] = extract_info(commit['message'])
+        if not content['message']:
+            return 'Missing valid test info', 404
 
-    if not all(k in repo.keys() for k in ['owner', 'html_url', 'compare_url']):
-        return 'Cannot find all the needed repository fields', 404
+        content['username'] = repo['owner']['name']
+        user = UsersDB.query.filter_by(username = content['username']).first()
+        if not user:
+            return 'Unknown username', 404
 
-    if not all(k in commit.keys() for k in ['id', 'message']):
-        return 'Cannot find all the needed head_commit fields', 404
+        # Fetch until ExtraCnt commits before master to try hard to find
+        # a functional change with corresponding bench number.
+        ExtraCnt = 7
 
-    content = { 'ref'      : data['ref'].split('/')[-1],
-                'repo_url' : repo['html_url'],
-                'sha'      : commit['id'],
-                'master'   : 'master'     # We assume base branch ref is master
-              }
+        cmd = repo['compare_url'].format(base = 'master~' + str(ExtraCnt + 1),
+                                         head = content['sha'])
+        req = requests.get(cmd).json()
 
-    if '\n@submit' not in commit['message']:
-        return 'Nothing to do here', 200      # Not an error
+        commits = req['commits']
+        bench_head = find_bench(commits)
+        bench_base = find_bench(commits[:ExtraCnt + 1])
+        if not bench_head or not bench_base:
+            return 'Cannot find bench numbers', 404
 
-    content['message'] = extract_info(commit['message'])
-    if not content['message']:
-        return 'Missing valid test info', 404
+        content['master_sha'] = commits[ExtraCnt].get('sha')
+        content['bench_head'] = bench_head
+        content['bench_base'] = bench_base
 
-    content['username'] = repo['owner'].get('name')
-    user = UsersDB.query.filter_by(username = content['username']).first()
-    if not user:
-        return 'Unknown username', 404
-
-    # Fetch until ExtraCnt commits before master to try hard to find
-    # a functional change with corresponding bench number.
-    ExtraCnt = 7
-
-    cmd = repo['compare_url'].format(base = 'master~' + str(ExtraCnt + 1),
-                                     head = content['sha'])
-    req = requests.get(cmd).json()
-
-    commits = req.get('commits')
-    bench_head = find_bench(commits)
-    bench_base = find_bench(commits[:ExtraCnt + 1])
-    if not bench_head or not bench_base:
-        return 'Cannot find bench numbers', 404
-
-    content['master_sha'] = commits[ExtraCnt].get('sha')
-    content['bench_head'] = bench_head
-    content['bench_base'] = bench_base
+    except KeyError as k:
+        return 'Missing field: ' + k.message, 404
 
     ft = Fishtest()
     if not ft.login(content['username'], user.fishtest_pwd):
-        return 'Failed login into Fishtest', 404
+        return 'Failed login to Fishtest', 404
 
     content['test_id'], error = ft.submit_test(content)
     if error:

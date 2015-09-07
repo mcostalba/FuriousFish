@@ -1,13 +1,13 @@
 from mechanize import Browser, ControlNotFoundError
 import re
 
-
 class Fishtest():
 
-    run_url = 'http://tests.stockfishchess.org/tests/run'
+    fishtest_run_url = 'http://tests.stockfishchess.org/tests/run'
 
     def __init__(self):
         self.browser = Browser()
+
 
     def login(self, username, password):
         """Login to Fishtest
@@ -16,7 +16,7 @@ class Fishtest():
         'new test' form and keep it in self.browser for later submit.
         """
         br = self.browser
-        br.open(self.run_url)
+        br.open(self.fishtest_run_url)
 
         # Mechanize fails loudly if a field is not found
         try:
@@ -33,6 +33,7 @@ class Fishtest():
         except ControlNotFoundError:
            return False
         return True
+
 
     def submit_test(self, content):
         """Submit test
@@ -61,18 +62,15 @@ class Fishtest():
 
         data = br.submit().get_data() # Here we go!
 
-        try:
-            # After successful submit, Fishtest returns the main tests view.
-            # Look for the newly created test there and return the test id.
-            #
-            # FIXME we pick the first one, can fail in case of an old test with
-            # same ref and low prority.
-            p = r'<a href="/tests/view/(\w+)">' + content['ref'] + r'</a>'
-            test_id = re.search(p, data, re.MULTILINE|re.DOTALL)
-            if not test_id:
-                return None, 'Fishtest: unable to find test_id'
+        # After a successful submit, Fishtest returns the main tests view.
+        # Look for the newly created test there and return the test id.
+        p = r'<a href="/tests/view/(\w+)">{ref}</a>.*?/compare/{master}\.\.\.{sha}'
+        p = p.format(ref    = content['ref'],
+                     master = content['master_sha'][:7],
+                     sha    = content['sha'][:7])
 
-        except ControlNotFoundError:
-           return None, 'Fishtest: test submit failed'
+        test_id = re.search(p, data, re.MULTILINE|re.DOTALL)
+        if not test_id:
+            return None, 'Fishtest: unable to find test_id'
 
         return test_id.group(1), None
