@@ -1,4 +1,5 @@
 from mechanize import Browser, ControlNotFoundError
+import re
 
 
 class Fishtest():
@@ -9,75 +10,69 @@ class Fishtest():
         self.browser = Browser()
 
     def login(self, username, password):
+        """Login to Fishtest
+
+        Try to login with passed credentials, upon success we receive the
+        'new test' form and keep it in self.browser for later submit.
+        """
         br = self.browser
         br.open(self.run_url)
-        br.select_form(nr = 0)
-        br["username"] = username
-        br["password"] = password
-        br.submit()
-        br.select_form(nr = 0)
+
+        # Mechanize fails loudly if a field is not found
         try:
+           br.select_form(nr = 0)
+           br["username"] = username
+           br["password"] = password
+           br.submit()
+           br.select_form(nr = 0)
+
+           # Ok, now we should have received the 'run' form, let's verify
+           # if all was ok accessing one of the returned fields.
            br["test_type"]
+
         except ControlNotFoundError:
            return False
         return True
 
+    def submit_test(self, content):
+        """Submit test
 
-def forge_post():
-    """
-    http://tests.stockfishchess.org/tests/run
+        Should be done after login so that we already have received the 'new'
+        form from Fishtest.
+        """
+        map = { 'ref'        : 'test-branch',
+                'bench_head' : 'test-signature',
+                'master'     : 'base-branch',
+                'bench_base' : 'base-signature',
+                'repo_url'   : 'tests-repo',
+                'message'    : 'run-info'
+              }
 
-    import requests
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    payload = {'username':'niceusername','password':'123456'}
+        if not all(k in content.keys() for k in map.keys()):
+            return None, 'Fishtest: map error'
 
-    session = requests.Session()
-    session.post('https://admin.example.com/login.php',headers=headers,data=payload)
-    # the session instance holds the cookie. So use it to get/post later.
-    # e.g. session.get('https://example.com/profile')
+        br = self.browser
+        try:
+            for k in map.keys():
+                br[map[k]] = content[k]
 
+        except ControlNotFoundError:
+           return None, 'Fishtest: missing fields in test submit form'
 
-    http://wwwsearch.sourceforge.net/mechanize/
+        data = br.submit().get_data() # Here we go!
 
-     url='http://tests.stockfishchess.org/tests/run'
-     user='mcostalba'
-     pwd='xxxxxx'
+        try:
+            # After successful submit, Fishtest returns the main tests view.
+            # Look for the newly created test there and return the test id.
+            #
+            # FIXME we pick the first one, can fail in case of an old test with
+            # same ref and low prority.
+            p = r'<a href="/tests/view/(\w+)">' + content['ref'] + r'</a>'
+            test_id = re.search(p, data, re.MULTILINE|re.DOTALL)
+            if not test_id:
+                return None, 'Fishtest: unable to find test_id'
 
+        except ControlNotFoundError:
+           return None, 'Fishtest: test submit failed'
 
-    br.set_handle_robots(False)
-    br.addheaders = [("User-agent","Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.2.13) Gecko/20101206 Ubuntu/10.10 (maverick) Firefox/3.6.13")]
-
-
-
-    """
-    map = {
-            'sha'        : 'test-branch',
-            'bench_head' : 'test-signature',
-            'bench_base' : 'base-signature',
-            'repo_url'   : 'tests-repo',
-            'test_info'   : 'run-info' } # FIXME ! MISSING
-
-    payload = { 'test_type': 'Standard',
-                'test-branch': 'HEAD',
-                'new-options' :'Hash=128',
-                'test-signature' : '77777',
-                'base-branch' : 'master',
-                'base-options' : 'Hash=128',
-                'base-signature' : '888888',
-                'stop_rule' : 'sprt',
-                'num-games' : '20000',
-                'sprt_elo0' : '0',
-                'sprt_elo1' : '5',
-                'spsa_A' : '5000',
-                'spsa_gamma' : '0.101',
-                'spsa_alpha' : '0.602',
-                'spsa_raw_params' : 'Aggressiveness,30,0,200,10,0.0020',
-                'tc' : '15+0.05',
-                'threads' : '1',
-                'book' : '2moves_v1.pgn',
-                'book-depth' : '8',
-                'priority': '0',
-                'throughput': '1000',
-                'tests-repo' : 'https://github.com/username/Stockfish',
-                'run-info' : 'test note field' }
-    pass
+        return test_id.group(1), None

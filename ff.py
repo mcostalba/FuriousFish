@@ -129,7 +129,8 @@ def new():
 
     content = { 'ref'      : data['ref'].split('/')[-1],
                 'repo_url' : repo['html_url'],
-                'sha'      : commit['id']
+                'sha'      : commit['id'],
+                'master'   : 'master'     # We assume base branch ref is master
               }
 
     if '\n@submit' not in commit['message']:
@@ -158,9 +159,18 @@ def new():
     if not bench_head or not bench_base:
         return 'Cannot find bench numbers', 404
 
-    content['master'] = commits[ExtraCnt].get('sha')
+    content['master_sha'] = commits[ExtraCnt].get('sha')
     content['bench_head'] = bench_head
     content['bench_base'] = bench_base
+
+    ft = Fishtest()
+    if not ft.login(content['username'], user.fishtest_pwd):
+        return 'Failed login into Fishtest', 404
+
+    content['test_id'], error = ft.submit_test(content)
+    if error:
+        return error, 404
+
     db.session.add(TestsDB(json.dumps(content), user))
     db.session.commit()
     return jsonify(content), 200
