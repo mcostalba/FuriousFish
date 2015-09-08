@@ -12,8 +12,8 @@ os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 app = Flask(__name__)
 
 app.secret_key = os.urandom(24) # Needed by session management
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/ff.db'
 app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['SQLALCHEMY_DATABASE_URI']
 app.config['GITHUB_CLIENT_ID'] = os.environ['GITHUB_CLIENT_ID']
 app.config['GITHUB_CLIENT_SECRET'] = os.environ['GITHUB_CLIENT_SECRET']
 
