@@ -223,6 +223,11 @@ def set_hook():
     that is more complex than basic authentication but has the advantage that we
     don't need to know nor to request the GitHub user's password.
     """
+    if not 'oauth_state' in session:
+        # In case someone calls us out without any ongoing registration
+        # process then just return.
+        return 'You are not supposed to call us!', 404
+
     github = OAuth2Session(app.config['GITHUB_CLIENT_ID'], state = session['oauth_state'])
     oauth_token = github.fetch_token('https://github.com/login/oauth/access_token',
                                      client_secret = app.config['GITHUB_CLIENT_SECRET'],
