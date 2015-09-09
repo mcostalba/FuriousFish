@@ -16,23 +16,41 @@
 {% block body %}
   <form method="POST">
     <div class="col-sm-8">
-      <div class="form-group">
-          <label for='username' class="control-label">Username</label>
-          <input type='text' class="form-control" name="username" id="username" required>
-          <p class="help-block">Insert GitHub username here. Must be the same username you use in Fishtest</p>
+      <div class="panel panel-default">
+          <div class="panel-heading">
+            <h3 class="panel-title">GitHub</h3>
+          </div>
+          <div class="panel-body">
+            <div class="form-group">
+              <label for='gh_username' class="control-label">Username</label>
+              <input type='text' class="form-control" name="gh_username" id="gh_username" required>
+              <p class="help-block">Insert GitHub username here</p>
+            </div>
+            <div class="form-group">
+              <label for='repo' class="control-label">Repository</label>
+              <select class="form-control" name="repo" id="repo_select" required></select>
+              <p class="help-block">Select the GitHub repository you use for pushing tests. First insert username</p>
+            </div>
+          </div>
       </div>
-      <div class="form-group">
-          <label for='repo' class="control-label">Repository</label>
-          <select class="form-control" name="repo" id="repo_select" required></select>
-          <p class="help-block">Select the GitHub repository you use for pushing tests. First insert username</p>
+      <div class="panel panel-default">
+        <div class="panel-heading">
+          <h3 class="panel-title">Fishtest</h3>
+        </div>
+        <div class="panel-body">
+          <div class="form-group">
+            <label for='ft_username' class="control-label">Username</label>
+            <input type='text' class="form-control" name="ft_username" id="ft_username" required>
+            <p class="help-block">Insert Fishtest username here</p>
+          </div>
+          <div class="form-group">
+            <label for='ft_password' class="control-label">Password</label>
+            <input type='ft_password' class="form-control" name="ft_password" required>
+            <p class="help-block">Password is needed to login to Fishtest and submit tests for you,
+                                  https connection is secure and password will be transmitted encrypted.</p>
+          </div>
+        </div>
       </div>
-      <div class="form-group">
-          <label for='password' class="control-label">Fishtest password</label>
-          <input type='password' class="form-control" name="password" required>
-          <p class="help-block">Password is needed to login to Fishtest and submit tests for you,
-                                https connection is secure and password will be transmitted encrypted.</p>
-      </div>
-
       <input class="btn btn-default" type="submit" value="Submit">
     </div>
   </form>
@@ -46,14 +64,14 @@
       return xmlHttp.responseText;
    }
 
-   $( "#username" ).change(function( eventObject ) {
+   $( '#gh_username' ).change(function( eventObject ) {
 
-   /* Upon changing the username, retrieve corresponding
+   /* Upon changing github username, retrieve corresponding
       repos on GitHub and populate the repo_select field. */
 
       var sel = $( '#repo_select' ).empty();
 
-      var url = 'https://api.github.com/users/' + $.trim($( '#username' ).val()) + '/repos';
+      var url = 'https://api.github.com/users/' + $.trim($( '#gh_username' ).val()) + '/repos';
       var r = JSON.parse(httpGet(url)); // Call GitHub here
 
       for (var i = 0; i < r.length; i++) {
@@ -62,6 +80,12 @@
           text : r[i].name
         }));
       }
+
+      // If fishtest username is empty set us as default value
+      if( !$( '#ft_username' ).val() ) {
+        $( '#ft_username' ).val( $( '#gh_username' ).val() );
+      }
+
    });
   </script>
 {% endblock %}

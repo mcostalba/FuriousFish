@@ -25,21 +25,21 @@ db = SQLAlchemy(app)
 class UsersDB(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key = True)
-    username     = db.Column(db.String(50), unique = True)
-    fishtest_pwd = db.Column(db.String(50))
-    github_repo  = db.Column(db.String(50))
+    ft_username = db.Column(db.String(50), unique = True)
+    ft_password = db.Column(db.String(50))
+    gh_username = db.Column(db.String(50), unique = True)
+    repo        = db.Column(db.String(50))
 
     tests = db.relationship("TestsDB",
                             lazy = 'dynamic',
-                         #   order_by = id,
                             cascade = 'all, delete, delete-orphan',
                             backref = db.backref('user', lazy = 'joined'))
 
-    def __init__(self, username, password, repo):
-        self.username     = username
-        self.fishtest_pwd = password
-        self.github_repo  = repo
-
+    def __init__(self, ft_username, ft_password, gh_username, repo):
+        self.ft_username = ft_username
+        self.ft_password = ft_password
+        self.gh_username = gh_username
+        self.repo        = repo
 
 class TestsDB(db.Model):
     __tablename__ = 'tests'
@@ -103,8 +103,8 @@ def root():
 def users():
     """Show the list of registered users
     """
-    users = UsersDB.query.order_by(UsersDB.username).all()
-    users = [{'user' : e.username, 'count' : e.tests.count()} for e in users]
+    users = UsersDB.query.order_by(UsersDB.ft_username).all()
+    users = [{'user' : e.ft_username, 'count' : e.tests.count()} for e in users]
     return render_template('users.html', users = users)
 
 
@@ -136,8 +136,8 @@ def new():
         if not content['message']:
             return 'Missing valid test info', 404
 
-        content['username'] = repo['owner']['name']
-        user = UsersDB.query.filter_by(username = content['username']).first()
+        content['gh_username'] = repo['owner']['name']
+        user = UsersDB.query.filter_by(gh_username = content['gh_username']).first()
         if not user:
             return 'Unknown username', 404
 
@@ -157,15 +157,16 @@ def new():
         if not bench_head or not bench_base:
             return 'Cannot find bench numbers', 404
 
-        content['master_sha'] = commits[ExtraCnt].get('sha')
-        content['bench_head'] = bench_head
-        content['bench_base'] = bench_base
+        content['master_sha']  = commits[ExtraCnt].get('sha')
+        content['bench_head']  = bench_head
+        content['bench_base']  = bench_base
+        content['ft_username'] = user.ft_username
 
     except KeyError as k:
         return 'Missing field: ' + k.message, 404
 
     ft = Fishtest()
-    if not ft.login(content['username'], user.fishtest_pwd):
+    if not ft.login(content['ft_username'], user.ft_password):
         return 'Failed login to Fishtest', 404
 
     content['test_id'], error = ft.submit_test(content)
@@ -190,16 +191,17 @@ def register():
 
         # Fields are already half validated in the client, in particular
         # username and repo have been already verified against GitHub.
-        if UsersDB.query.filter_by(username = form['username']).count():
+        if UsersDB.query.filter_by(ft_username = form['ft_username']).count():
             error = "Username already existing"
 
-        elif not Fishtest().login(form['username'], form['password']):
+        elif not Fishtest().login(form['ft_username'], form['ft_password']):
             error = "Cannot login into fishtest. Invalid password?"
 
         else:
-            session['user'] = { 'username' : form['username'],
-                                'password' : form['password'],
-                                'repo'     : form['repo']
+            session['user'] = { 'ft_username' : form['ft_username'],
+                                'ft_password' : form['ft_password'],
+                                'gh_username' : form['gh_username'],
+                                'repo'        : form['repo']
                               }
 
             # Redirect to GitHub where user will be requested to authorize us to
@@ -242,7 +244,7 @@ def set_hook():
     url = urlparse(request.url)
     url = url.scheme + '://' + url.netloc + url_for('new')
     u = session['user']
-    cmd = 'https://api.github.com/repos/' + u['username'] + '/' + u['repo'] + '/hooks'
+    cmd = 'https://api.github.com/repos/' + u['gh_username'] + '/' + u['repo'] + '/hooks'
 
     # First check if hook is already exsisting, GitHub would add a new one in
     # this case, not exactly what the API docs say but nevermind....
