@@ -12,6 +12,8 @@ os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 app = Flask(__name__)
 
+app.config.from_pyfile('furiousfish.cfg') # Openshift
+
 app.secret_key = os.urandom(24) # Needed by session management
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['SQLALCHEMY_DATABASE_URI']
