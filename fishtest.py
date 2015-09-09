@@ -1,14 +1,14 @@
 from mechanize import Browser, ControlNotFoundError
+from retry import retry
 import re
 
 class Fishtest():
-
-    fishtest_run_url = 'http://tests.stockfishchess.org/tests/run'
 
     def __init__(self):
         self.browser = Browser()
 
 
+    @retry(tries = 3, delay = 1, backoff = 2)
     def login(self, username, password):
         """Login to Fishtest
 
@@ -16,7 +16,7 @@ class Fishtest():
         'new test' form and keep it in self.browser for later submit.
         """
         br = self.browser
-        br.open(self.fishtest_run_url)
+        br.open('http://tests.stockfishchess.org/tests/run')
 
         # Mechanize fails loudly if a field is not found
         try:
@@ -35,6 +35,7 @@ class Fishtest():
         return True
 
 
+    @retry(tries = 3, delay = 1, backoff = 2)
     def submit_test(self, content):
         """Submit test
 

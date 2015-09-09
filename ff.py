@@ -1,6 +1,7 @@
 from flask import Flask, request, session, jsonify, render_template, redirect, url_for
 from flask.ext.sqlalchemy import SQLAlchemy
 from requests_oauthlib import OAuth2Session
+from retry.api import retry_call
 from urlparse import urlparse
 from fishtest import Fishtest
 import simplejson as json
@@ -144,7 +145,9 @@ def new():
 
         cmd = repo['compare_url'].format(base = 'master~' + str(ExtraCnt + 1),
                                          head = content['sha'])
-        req = requests.get(cmd).json()
+
+        req = retry_call(requests.get, [cmd], tries = 3, delay = 1, backoff = 2)
+        req = req.json()
 
         commits = req['commits']
         bench_head = find_bench(commits)
