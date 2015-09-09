@@ -68,7 +68,7 @@ class Fishtest():
         p = r'<a href="/tests/view/(\w+)">{ref}</a>.*?/compare/{master}\.\.\.{sha}'
         p = p.format(ref    = content['ref'],
                      master = content['master_sha'][:7],
-                     sha    = content['sha'][:7])
+                     sha    = content['ref_sha'][:7])
 
         test_id = re.search(p, data, re.MULTILINE|re.DOTALL)
         if not test_id:

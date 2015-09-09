@@ -25,11 +25,11 @@
   <tbody>
     {% for e in tests %}
     <tr>
-      <td>{{ e.get('username')  }}</td>
+      <td>{{ e.get('ft_username') }}</td>
       <td>
-          <a href="{{ e.get('repo_url') }}/commit/{{ e.get('sha'   )[:10] }}" target="_blank">{{ e.get('ref') }}</a> (bench: {{ e.get('bench_head') }}) vs
+          <a href="{{ e.get('repo_url') }}/commit/{{ e.get('ref_sha'   )[:10] }}" target="_blank">{{ e.get('ref') }}</a> (bench: {{ e.get('bench_head') }}) vs
           <a href="{{ e.get('repo_url') }}/commit/{{ e.get('master_sha')[:10] }}" target="_blank">master</a> (bench: {{ e.get('bench_base') }})
-          <a href="{{ e.get('repo_url') }}/compare/{{ e.get('master_sha')[:10] }}...{{ e.get('sha')[:10] }}" target="_blank">diff</a>
+          <a href="{{ e.get('repo_url') }}/compare/{{ e.get('master_sha')[:10] }}...{{ e.get('ref_sha')[:10] }}" target="_blank">diff</a>
       </td>
       <td>{{ e.get('message') }}</td>
     </tr>

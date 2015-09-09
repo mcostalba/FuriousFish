@@ -124,13 +124,13 @@ def new():
         repo   = data['repository']
         commit = data['head_commit']
         content = { 'ref'      : data['ref'].split('/')[-1],
+                    'ref_sha'  : commit['id'],
                     'repo_url' : repo['html_url'],
-                    'sha'      : commit['id'],
-                    'master'   : 'master'     # We assume base branch ref is master
+                    'master'   : 'master'     # We assume base ref is master
                   }
 
         if '\n@submit' not in commit['message']:
-            return 'Nothing to do here', 200      # Not an error
+            return 'Nothing to do here', 200  # Not an error
 
         content['message'] = extract_info(commit['message'])
         if not content['message']:
@@ -139,14 +139,14 @@ def new():
         content['gh_username'] = repo['owner']['name']
         user = UsersDB.query.filter_by(gh_username = content['gh_username']).first()
         if not user:
-            return 'Unknown username', 404
+            return 'Unknown GitHub username', 404
 
         # Fetch until ExtraCnt commits before master to try hard to find
         # a functional change with corresponding bench number.
         ExtraCnt = 7
 
         cmd = repo['compare_url'].format(base = 'master~' + str(ExtraCnt + 1),
-                                         head = content['sha'])
+                                         head = content['ref_sha'])
 
         req = retry_call(requests.get, [cmd], tries = 3, delay = 1, backoff = 2)
         req = req.json()
@@ -234,6 +234,7 @@ def set_hook():
     oauth_token = github.fetch_token('https://github.com/login/oauth/access_token',
                                      client_secret = app.config['GITHUB_CLIENT_SECRET'],
                                      authorization_response = request.url)
+    session.pop('oauth_state') # Don't leave behind a stale key
     if oauth_token is None:
         return render_template('register.html', error = 'Failed authorization on GitHub')
 
