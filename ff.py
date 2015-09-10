@@ -86,8 +86,9 @@ def extract_info(msg):
     return info[0].strip()
 
 
-@app.route('/', methods=['GET'])
-def root():
+@app.route('/')
+@app.route('/view/<username>')
+def root(username = None):
     """Show the list of submitted tests
     """
     congrats = session.get('congrats')
@@ -96,10 +97,10 @@ def root():
 
     tests = TestsDB.query.order_by(TestsDB.id.desc()).all()
     tests = [json.loads(str(e.data)) for e in tests]
-    return render_template('tests.html', tests = tests, congrats = congrats)
+    return render_template('tests.html', tests = tests, username = username, congrats = congrats)
 
 
-@app.route('/users', methods=['GET'])
+@app.route('/users')
 def users():
     """Show the list of registered users
     """
@@ -218,7 +219,7 @@ def register():
     return render_template('register.html', error = error)
 
 
-@app.route('/github_callback', methods=['GET'])
+@app.route('/github_callback')
 def set_hook():
     """Create a webhook on GitHub
 

@@ -24,15 +24,18 @@
   </thead>
   <tbody>
     {% for e in tests %}
+    {% if not username or username == e.get('ft_username') %}
     <tr>
-      <td>{{ e.get('ft_username') }}</td>
-      <td>
-          <a href="{{ e.get('repo_url') }}/commit/{{ e.get('ref_sha'   )[:10] }}" target="_blank">{{ e.get('ref') }}</a> (bench: {{ e.get('bench_head') }}) vs
-          <a href="{{ e.get('repo_url') }}/commit/{{ e.get('master_sha')[:10] }}" target="_blank">master</a> (bench: {{ e.get('bench_base') }})
-          <a href="{{ e.get('repo_url') }}/compare/{{ e.get('master_sha')[:10] }}...{{ e.get('ref_sha')[:10] }}" target="_blank">diff</a>
+      <td class="col-xs-4 col-md-1"><a {{ 'href=' + url_for('root', username = e.get('ft_username')) }}>{{ e.get('ft_username') }}</a></td>
+      <td class="col-xs-8 col-md-3">
+          <a href="http://tests.stockfishchess.org/tests/view/{{ e.get('test_id') }}" target="_blank">{{ e.get('ref') }}</a>
+          <span class="pull-right">
+            <a href="{{ e.get('repo_url') }}/compare/{{ e.get('master_sha')[:10] }}...{{ e.get('ref_sha')[:10] }}" target="_blank">diff</a>
+          </span>
       </td>
-      <td>{{ e.get('message') }}</td>
+      <td class="col-xs-10 col-md-8">{{ e.get('message') }}</td>
     </tr>
+    {% endif %}
     {% endfor %}
   </tbody>
 </table>
