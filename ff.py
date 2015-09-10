@@ -12,9 +12,9 @@ os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 app = Flask(__name__)
 
-app.config.from_pyfile('furiousfish.cfg') # Openshift
+app.config.from_pyfile('furiousfish.cfg')  # Openshift
 
-app.secret_key = os.urandom(24) # Needed by session management
+app.secret_key = os.urandom(24)
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['SQLALCHEMY_DATABASE_URI']
 app.config['GITHUB_CLIENT_ID'] = os.environ['GITHUB_CLIENT_ID']
@@ -22,18 +22,19 @@ app.config['GITHUB_CLIENT_SECRET'] = os.environ['GITHUB_CLIENT_SECRET']
 
 db = SQLAlchemy(app)
 
+
 class UsersDB(db.Model):
     __tablename__ = 'users'
-    id = db.Column(db.Integer, primary_key = True)
-    ft_username = db.Column(db.String(50), unique = True)
+    id = db.Column(db.Integer, primary_key=True)
+    ft_username = db.Column(db.String(50), unique=True)
     ft_password = db.Column(db.String(50))
-    gh_username = db.Column(db.String(50), unique = True)
+    gh_username = db.Column(db.String(50), unique=True)
     repo        = db.Column(db.String(50))
 
     tests = db.relationship("TestsDB",
-                            lazy = 'dynamic',
-                            cascade = 'all, delete, delete-orphan',
-                            backref = db.backref('user', lazy = 'joined'))
+                            lazy='dynamic',
+                            cascade='all, delete, delete-orphan',
+                            backref=db.backref('user', lazy='joined'))
 
     def __init__(self, ft_username, ft_password, gh_username, repo):
         self.ft_username = ft_username
@@ -41,10 +42,11 @@ class UsersDB(db.Model):
         self.gh_username = gh_username
         self.repo        = repo
 
+
 class TestsDB(db.Model):
     __tablename__ = 'tests'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable = False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     state   = db.Column(db.String(50))
     data    = db.Column(db.String(300))
 
@@ -88,25 +90,25 @@ def extract_info(msg):
 
 @app.route('/')
 @app.route('/view/<username>')
-def root(username = None):
+def root(username=None):
     """Show the list of submitted tests
     """
     congrats = session.get('congrats')
     if congrats:
-        session.pop('congrats') # Show congratulations alert only once
+        session.pop('congrats')  # Show congratulations alert only once
 
     tests = TestsDB.query.order_by(TestsDB.id.desc()).all()
     tests = [json.loads(str(e.data)) for e in tests]
-    return render_template('tests.html', tests = tests, username = username, congrats = congrats)
-
+    return render_template('tests.html', tests=tests,
+                           username=username, congrats=congrats)
 
 @app.route('/users')
 def users():
     """Show the list of registered users
     """
     users = UsersDB.query.order_by(UsersDB.ft_username).all()
-    users = [{'user' : e.ft_username, 'count' : e.tests.count()} for e in users]
-    return render_template('users.html', users = users)
+    users = [{'user': e.ft_username, 'count': e.tests.count()} for e in users]
+    return render_template('users.html', users=users)
 
 
 @app.route('/new', methods=['POST'])
@@ -114,7 +116,7 @@ def new():
     """Create a new test upon receiving a POST request from GitHub's webhook
     """
 
-    #TODO Validate payload (https://developer.github.com/webhooks/securing/#validating-payloads-from-github)
+    # TODO Validate payload (https://developer.github.com/webhooks/securing/#validating-payloads-from-github)
     # see https://github.com/carlos-jenkins/python-github-webhooks/blob/master/webhooks.py
 
     try:
@@ -123,13 +125,12 @@ def new():
         return 'Content-Type is not json', 404
 
     try:
-        repo   = data['repository']
+        repo = data['repository']
         commit = data['head_commit']
-        content = { 'ref'      : data['ref'].split('/')[-1],
-                    'ref_sha'  : commit['id'],
-                    'repo_url' : repo['html_url'],
-                    'master'   : 'master'     # We assume base ref is master
-                  }
+        content = {'ref'     : data['ref'].split('/')[-1],
+                   'ref_sha' : commit['id'],
+                   'repo_url': repo['html_url'],
+                   'master'  : 'master'}      # We assume base ref is master
 
         if '\n@submit' not in commit['message']:
             return 'Nothing to do here', 200  # Not an error
@@ -139,7 +140,7 @@ def new():
             return 'Missing valid test info', 404
 
         content['gh_username'] = repo['owner']['name']
-        user = UsersDB.query.filter_by(gh_username = content['gh_username']).first()
+        user = UsersDB.query.filter_by(gh_username=content['gh_username']).first()
         if not user:
             return 'Unknown GitHub username', 404
 
@@ -147,10 +148,10 @@ def new():
         # a functional change with corresponding bench number.
         ExtraCnt = 7
 
-        cmd = repo['compare_url'].format(base = 'master~' + str(ExtraCnt + 1),
-                                         head = content['ref_sha'])
+        cmd = repo['compare_url'].format(base='master~' + str(ExtraCnt + 1),
+                                         head=content['ref_sha'])
 
-        req = retry_call(requests.get, [cmd], tries = 3, delay = 1, backoff = 2)
+        req = retry_call(requests.get, [cmd], tries=3, delay=1, backoff=2)
         req = req.json()
 
         commits = req['commits']
@@ -162,9 +163,9 @@ def new():
         if not bench_head or not bench_base:
             return 'Cannot find bench numbers', 404
 
-        content['master_sha']  = commits[ExtraCnt].get('sha')
-        content['bench_head']  = bench_head
-        content['bench_base']  = bench_base
+        content['master_sha'] = commits[ExtraCnt].get('sha')
+        content['bench_head'] = bench_head
+        content['bench_base'] = bench_base
         content['ft_username'] = user.ft_username
 
     except KeyError as k:
@@ -196,27 +197,28 @@ def register():
 
         # Fields are already half validated in the client, in particular
         # username and repo have been already verified against GitHub.
-        if UsersDB.query.filter_by(ft_username = form['ft_username']).count():
+        if UsersDB.query.filter_by(ft_username=form['ft_username']).count():
             error = "Username already existing"
 
         elif not Fishtest().login(form['ft_username'], form['ft_password']):
             error = "Cannot login into fishtest. Invalid password?"
 
         else:
-            session['user'] = { 'ft_username' : form['ft_username'],
-                                'ft_password' : form['ft_password'],
-                                'gh_username' : form['gh_username'],
-                                'repo'        : form['repo']
-                              }
+            session['user'] = {'ft_username': form['ft_username'],
+                               'ft_password': form['ft_password'],
+                               'gh_username': form['gh_username'],
+                               'repo'       : form['repo']}
 
-            # Redirect to GitHub where user will be requested to authorize us to
-            # create a new webhook and then will be redirected to github_callback.
-            github = OAuth2Session(app.config['GITHUB_CLIENT_ID'], scope = ['write:repo_hook'])
-            authorization_url, state = github.authorization_url('https://github.com/login/oauth/authorize')
+            # Redirect to GitHub where user will be requested to authorize us
+            # to set a webhook and then will be redirected to github_callback.
+            github = OAuth2Session(app.config['GITHUB_CLIENT_ID'],
+                                   scope=['write:repo_hook'])
+            url = 'https://github.com/login/oauth/authorize'
+            authorization_url, state = github.authorization_url(url)
             session['oauth_state'] = state
             return redirect(authorization_url)
 
-    return render_template('register.html', error = error)
+    return render_template('register.html', error=error)
 
 
 @app.route('/github_callback')
@@ -226,23 +228,24 @@ def set_hook():
     Set a new webhook on GitHub that upon a push event on user repository makes
     a POST request to our new() function.
 
-    Creating a webhook requires authorized access. Here we use GitHub OAuth scheme
-    that is more complex than basic authentication but has the advantage that we
-    don't need to know nor to request the GitHub user's password.
+    Creating a webhook requires authorized access. Here we use GitHub OAuth
+    that is more complex than basic authentication but has the advantage that
+    we don't need to know nor to request the GitHub user's password.
     """
-    if not 'oauth_state' in session:
+    if 'oauth_state' not in session:
         # In case someone calls us out without any ongoing registration
         # process then just return.
         return 'You are not supposed to call us!', 404
 
-    github = OAuth2Session(app.config['GITHUB_CLIENT_ID'], state = session['oauth_state'])
+    github = OAuth2Session(app.config['GITHUB_CLIENT_ID'],
+                           state=session['oauth_state'])
     oauth_token = github.fetch_token('https://github.com/login/oauth/access_token',
-                                     client_secret = app.config['GITHUB_CLIENT_SECRET'],
-                                     authorization_response = request.url)
-    session.pop('oauth_state') # Don't leave behind a stale key
+                                     client_secret=app.config['GITHUB_CLIENT_SECRET'],
+                                     authorization_response=request.url)
+    session.pop('oauth_state')  # Don't leave behind a stale key
     if oauth_token is None:
-        return render_template('register.html', error = 'Failed authorization on GitHub')
-
+        return render_template('register.html',
+                               error='Failed authorization on GitHub')
     assert 'user' in session
 
     # Everything went smooth, GitHub redirected the user here after he granted
@@ -261,18 +264,17 @@ def set_hook():
             print('Hook already exists on this repository')
             break
     else:
-        payload = { 'name'         : 'web',
-                    'active'       : True,
-                    'events'       : ['push'],
-                    'insecure_ssl' : '1',
-                    'config'       : { 'url': url, 'content_type': 'json' }
-                  }
+        payload = {'name'        : 'web',
+                   'active'      : True,
+                   'events'      : ['push'],
+                   'insecure_ssl': '1',
+                   'config'      : {'url': url, 'content_type': 'json'}}
 
-        r = github.post(cmd, data = json.dumps(payload)).json()
+        r = github.post(cmd, data=json.dumps(payload)).json()
 
         if 'test_url' not in r:
-            return render_template('register.html', error = 'Cannot set the webhook on GitHub')
-
+            return render_template('register.html',
+                                   error='Cannot set the webhook on GitHub')
     db.session.add(UsersDB(**session['user']))
     db.session.commit()
     session['congrats'] = True

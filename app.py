@@ -10,17 +10,17 @@ import os
 import sys
 
 try:
-  virtenv = os.path.join(os.environ.get('OPENSHIFT_PYTHON_DIR','.'), 'virtenv')
-  python_version = "python"+str(sys.version_info[0])+"."+str(sys.version_info[1])
-  os.environ['PYTHON_EGG_CACHE'] = os.path.join(virtenv, 'lib', python_version, 'site-packages')
-  virtualenv = os.path.join(virtenv, 'bin','activate_this.py')
-  if(sys.version_info[0] < 3):
-    execfile(virtualenv, dict(__file__=virtualenv))
-  else:
-    exec(open(virtualenv).read(), dict(__file__=virtualenv))
+    virtenv = os.path.join(os.environ.get('OPENSHIFT_PYTHON_DIR', '.'), 'virtenv')
+    python_version = "python"+str(sys.version_info[0])+"."+str(sys.version_info[1])
+    os.environ['PYTHON_EGG_CACHE'] = os.path.join(virtenv, 'lib', python_version, 'site-packages')
+    virtualenv = os.path.join(virtenv, 'bin', 'activate_this.py')
+    if (sys.version_info[0] < 3):
+        execfile(virtualenv, dict(__file__=virtualenv))
+    else:
+        exec(open(virtualenv).read(), dict(__file__=virtualenv))
 
 except IOError:
-  pass
+    pass
 
 #
 # IMPORTANT: Put any additional includes below this line.  If placed above this
@@ -34,17 +34,17 @@ from ff import app as application
 #  main():
 #
 if __name__ == '__main__':
-  application = imp.load_source('app', 'ff.py')
-  port = application.app.config['PORT']
-  ip = application.app.config['IP']
-  app_name = application.app.config['APP_NAME']
-  host_name = application.app.config['HOST_NAME']
+    application = imp.load_source('app', 'ff.py')
+    port = application.app.config['PORT']
+    ip = application.app.config['IP']
+    app_name = application.app.config['APP_NAME']
+    host_name = application.app.config['HOST_NAME']
 
-  fwtype="flask"
-  imp.find_module(fwtype)
+    fwtype = "flask"
+    imp.find_module(fwtype)
 
-  print('Starting WSGIServer type %s on %s:%d ... ' % (fwtype, ip, port))
+    print('Starting WSGIServer type %s on %s:%d ... ' % (fwtype, ip, port))
 
-  server = Flask(__name__)
-  server.wsgi_app = application.app
-  server.run(host=ip, port=port)
+    server = Flask(__name__)
+    server.wsgi_app = application.app
+    server.run(host=ip, port=port)
