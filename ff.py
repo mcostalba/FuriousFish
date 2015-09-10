@@ -114,6 +114,7 @@ def new():
     """
 
     #TODO Validate payload (https://developer.github.com/webhooks/securing/#validating-payloads-from-github)
+    # see https://github.com/carlos-jenkins/python-github-webhooks/blob/master/webhooks.py
 
     try:
         data = request.get_json()
@@ -152,6 +153,9 @@ def new():
         req = req.json()
 
         commits = req['commits']
+        if len(commits) < ExtraCnt:
+            return 'Cannot retrieve all commit info', 404
+
         bench_head = find_bench(commits)
         bench_base = find_bench(commits[:ExtraCnt + 1])
         if not bench_head or not bench_base:
