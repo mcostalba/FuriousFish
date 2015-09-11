@@ -16,7 +16,7 @@
     {% for u in users %}
     <tr>
       <td>{{ u.user  }}</td>
-      <td>{{ u.count }}</td>
+      <td><a {{ 'href=' + url_for('root', username = u.user) }}>{{ u.count }}</a></td>
     </tr>
     {% endfor %}
   </tbody>
