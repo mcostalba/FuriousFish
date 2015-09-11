@@ -3,9 +3,11 @@ from flask.ext.sqlalchemy import SQLAlchemy
 from requests_oauthlib import OAuth2Session
 from retry.api import retry_call
 from urlparse import urlparse
+from hashlib import sha1
 from fishtest import Fishtest
 import simplejson as json
 import requests
+import hmac
 import os
 
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
@@ -115,10 +117,6 @@ def users():
 def new():
     """Create a new test upon receiving a POST request from GitHub's webhook
     """
-
-    # TODO Validate payload (https://developer.github.com/webhooks/securing/#validating-payloads-from-github)
-    # see https://github.com/carlos-jenkins/python-github-webhooks/blob/master/webhooks.py
-
     try:
         data = request.get_json()
     except:
@@ -143,6 +141,21 @@ def new():
         user = UsersDB.query.filter_by(gh_username=content['gh_username']).first()
         if not user:
             return 'Unknown GitHub username', 404
+
+        # Ensure request is from GitHub. Ideally we should check this as first
+        # step, but user lookup should be already done when validating the
+        # signature with the ft_password. See 'validating payloads from github'.
+        signature = request.headers.get('X-Hub-Signature')
+        if signature:
+            sha_name, signature = signature.split('=')
+            if sha_name != 'sha1':
+                return 'You are not GitHub!', 404
+
+            mac = hmac.new(str(user.ft_password), msg=request.data, digestmod=sha1)
+            if str(mac.hexdigest()) != str(signature):
+                return 'You are not GitHub!', 404
+            else:
+                print("Signature validated!!!")
 
         # Fetch until ExtraCnt commits before master to try hard to find
         # a functional change with corresponding bench number.
@@ -268,7 +281,9 @@ def set_hook():
                    'active'      : True,
                    'events'      : ['push'],
                    'insecure_ssl': '1',
-                   'config'      : {'url': url, 'content_type': 'json'}}
+                   'config'      : {'url': url,
+                                    'content_type': 'json',
+                                    'secret': u['ft_password']}}
 
         r = github.post(cmd, data=json.dumps(payload)).json()
 

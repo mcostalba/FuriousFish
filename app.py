@@ -40,10 +40,7 @@ if __name__ == '__main__':
     app_name = application.app.config['APP_NAME']
     host_name = application.app.config['HOST_NAME']
 
-    fwtype = "flask"
-    imp.find_module(fwtype)
-
-    print('Starting WSGIServer type %s on %s:%d ... ' % (fwtype, ip, port))
+    print('Starting WSGIServer type %s on %s:%d ... ' % ("flask", ip, port))
 
     server = Flask(__name__)
     server.wsgi_app = application.app

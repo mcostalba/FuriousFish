@@ -7,11 +7,8 @@ It is very simple to use, simply register with your Fishtest username here:
 
 https://furiousfish-mcostalba.c9.io/
 
-And you are done. Please note that currently Fishtest username should be the same of
-your GitHub account. **We don't handle different usernames.**
-
-Write your code as usual and when you have your patch ready you add **@submit** to
-your commit message:
+And you are done. Write your code as usual and when you have your patch ready
+you add **@submit** to your commit message:
 
     Simplify IID depth formula
 
