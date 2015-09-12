@@ -1,5 +1,6 @@
 from flask import Flask, request, session, jsonify, render_template, redirect, url_for
 from flask.ext.sqlalchemy import SQLAlchemy
+from sqlalchemy.sql.expression import func
 from requests_oauthlib import OAuth2Session
 from retry.api import retry_call
 from urlparse import urlparse
@@ -13,15 +14,8 @@ import os
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 app = Flask(__name__)
-
-app.config.from_pyfile('furiousfish.cfg')  # Openshift
-
+app.config.from_pyfile('furiousfish.cfg')
 app.secret_key = os.urandom(24)
-app.config['SESSION_TYPE'] = 'filesystem'
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['SQLALCHEMY_DATABASE_URI']
-app.config['GITHUB_CLIENT_ID'] = os.environ['GITHUB_CLIENT_ID']
-app.config['GITHUB_CLIENT_SECRET'] = os.environ['GITHUB_CLIENT_SECRET']
-
 db = SQLAlchemy(app)
 
 
@@ -108,7 +102,7 @@ def root(username=None):
 def users():
     """Show the list of registered users
     """
-    users = UsersDB.query.order_by(UsersDB.ft_username).all()
+    users = UsersDB.query.order_by(func.lower(UsersDB.ft_username)).all()
     users = [{'user': e.ft_username, 'count': e.tests.count()} for e in users]
     return render_template('users.html', users=users)
 
@@ -297,4 +291,4 @@ def set_hook():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host=os.getenv('IP', '0.0.0.0'), port=int(os.getenv('PORT', 8080)))
+    app.run(debug=True, host=app.config['IP'], port=app.config['PORT'])

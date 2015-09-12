@@ -35,10 +35,8 @@ from ff import app as application
 #
 if __name__ == '__main__':
     application = imp.load_source('app', 'ff.py')
-    port = application.app.config['PORT']
     ip = application.app.config['IP']
-    app_name = application.app.config['APP_NAME']
-    host_name = application.app.config['HOST_NAME']
+    port = application.app.config['PORT']
 
     print('Starting WSGIServer type %s on %s:%d ... ' % ("flask", ip, port))
 
