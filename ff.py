@@ -200,28 +200,26 @@ def register():
     """
     error = ''
     if request.method == 'POST':
-        form = request.form
+        user = request.form
 
         # Fields are already half validated in the client, in particular
         # username and repo have been already verified against GitHub.
-        if UsersDB.query.filter_by(ft_username=form['ft_username']).count():
+        if UsersDB.query.filter_by(ft_username=user['ft_username']).first():
             error = "Username already existing"
 
-        elif not Fishtest().login(form['ft_username'], form['ft_password']):
+        elif not Fishtest().login(user['ft_username'], user['ft_password']):
             error = "Cannot login into fishtest. Invalid password?"
 
         else:
-            session['user'] = {'ft_username': form['ft_username'],
-                               'ft_password': form['ft_password'],
-                               'gh_username': form['gh_username'],
-                               'repo'       : form['repo']}
-
             # Redirect to GitHub where user will be requested to authorize us
             # to set a webhook and then will be redirected to github_callback.
             github = OAuth2Session(app.config['GITHUB_CLIENT_ID'],
                                    scope=['write:repo_hook'])
             url = 'https://github.com/login/oauth/authorize'
             authorization_url, state = github.authorization_url(url)
+
+            # Pass user info to set_hook() callback through session object
+            session['user'] = user
             session['oauth_state'] = state
             return redirect(authorization_url)
 
@@ -239,13 +237,13 @@ def set_hook():
     that is more complex than basic authentication but has the advantage that
     we don't need to know nor to request the GitHub user's password.
     """
-    if 'oauth_state' not in session:
-        # In case someone calls us out without any ongoing registration
-        # process then just return.
+    user = session.get('user')
+
+    # Check for spurious calls withouth any ongoing registartion
+    if not user or 'oauth_state' not in session:
         return 'You are not supposed to call us!', 404
 
-    github = OAuth2Session(app.config['GITHUB_CLIENT_ID'],
-                           state=session['oauth_state'])
+    github = OAuth2Session(app.config['GITHUB_CLIENT_ID'], state=session['oauth_state'])
     oauth_token = github.fetch_token('https://github.com/login/oauth/access_token',
                                      client_secret=app.config['GITHUB_CLIENT_SECRET'],
                                      authorization_response=request.url)
@@ -253,18 +251,18 @@ def set_hook():
     if oauth_token is None:
         return render_template('register.html',
                                error='Failed authorization on GitHub')
-    assert 'user' in session
 
     # Everything went smooth, GitHub redirected the user here after he granted
     # us authorized access, so let's proceed with setting the webhook.
-    url = urlparse(request.url)
-    url = url.scheme + '://' + url.netloc + url_for('new')
-    u = session['user']
-    cmd = 'https://api.github.com/repos/' + u['gh_username'] + '/' + u['repo'] + '/hooks'
+    hooks_url = 'https://api.github.com/repos/'
+    hooks_url = hooks_url + user['gh_username'] + '/' + user['repo'] + '/hooks'
 
     # First check if hook is already exsisting, GitHub would add a new one in
     # this case, not exactly what the API docs say but nevermind....
-    hooks = github.get(cmd).json()
+    hooks = github.get(hooks_url).json()
+
+    url = urlparse(request.url)
+    url = url.scheme + '://' + url.netloc + url_for('new')
 
     for h in hooks:
         if h.get('config').get('url') == url:
@@ -277,14 +275,15 @@ def set_hook():
                    'insecure_ssl': '1',
                    'config'      : {'url': url,
                                     'content_type': 'json',
-                                    'secret': u['ft_password']}}
+                                    'secret': user['ft_password']}}
 
-        r = github.post(cmd, data=json.dumps(payload)).json()
+        r = github.post(hooks_url, data=json.dumps(payload)).json()
 
         if 'test_url' not in r:
             return render_template('register.html',
                                    error='Cannot set the webhook on GitHub')
-    db.session.add(UsersDB(**session['user']))
+
+    db.session.add(UsersDB(**user))
     db.session.commit()
     session['congrats'] = True
     return redirect(url_for('root'))
