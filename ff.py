@@ -93,7 +93,12 @@ def root(username=None):
     if congrats:
         session.pop('congrats')  # Show congratulations alert only once
 
-    tests = TestsDB.query.order_by(TestsDB.id.desc()).all()
+    if username:
+        tests = TestsDB.query.join(UsersDB).filter_by(ft_username = username)
+    else:
+        tests = TestsDB.query
+
+    tests = tests.order_by(TestsDB.id.desc()).all()
     tests = [json.loads(str(e.data)) for e in tests]
     return render_template('tests.html', tests=tests,
                            username=username, congrats=congrats)
@@ -214,7 +219,7 @@ def register():
             # Redirect to GitHub where user will be requested to authorize us
             # to set a webhook and then will be redirected to github_callback.
             github = OAuth2Session(app.config['GITHUB_CLIENT_ID'],
-                                   scope=['write:repo_hook'])
+                                   scope=['admin:repo_hook'])
             url = 'https://github.com/login/oauth/authorize'
             authorization_url, state = github.authorization_url(url)
 

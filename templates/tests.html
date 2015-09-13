@@ -24,7 +24,6 @@
   </thead>
   <tbody>
     {% for e in tests %}
-    {% if not username or username == e.get('ft_username') %}
     <tr>
       <td class="col-xs-4 col-md-1"><a {{ 'href=' + url_for('root', username = e.get('ft_username')) }}>{{ e.get('ft_username') }}</a></td>
       <td class="col-xs-8 col-md-3">
@@ -35,7 +34,6 @@
       </td>
       <td class="col-xs-10 col-md-8">{{ e.get('message') }}</td>
     </tr>
-    {% endif %}
     {% endfor %}
   </tbody>
 </table>
