@@ -84,6 +84,14 @@ def extract_info(msg):
     return info[0].strip()
 
 
+def retry(req, cmd):
+    """A simple wrap around retry_call()
+
+    Avoid the caller to write default parameters
+    """
+    return retry_call(req, [cmd], tries=3, delay=1, backoff=2)
+
+
 @app.route('/')
 @app.route('/view/<username>')
 def root(username=None):
@@ -94,7 +102,7 @@ def root(username=None):
         session.pop('congrats')  # Show congratulations alert only once
 
     if username:
-        tests = TestsDB.query.join(UsersDB).filter_by(ft_username = username)
+        tests = TestsDB.query.join(UsersDB).filter_by(ft_username=username)
     else:
         tests = TestsDB.query
 
@@ -102,6 +110,7 @@ def root(username=None):
     tests = [json.loads(str(e.data)) for e in tests]
     return render_template('tests.html', tests=tests,
                            username=username, congrats=congrats)
+
 
 @app.route('/users')
 def users():
@@ -163,8 +172,7 @@ def new():
         cmd = repo['compare_url'].format(base='master~' + str(ExtraCnt + 1),
                                          head=content['ref_sha'])
 
-        req = retry_call(requests.get, [cmd], tries=3, delay=1, backoff=2)
-        req = req.json()
+        req = retry(requests.get, cmd).json()
 
         commits = req['commits']
         if len(commits) < ExtraCnt:
@@ -264,15 +272,25 @@ def set_hook():
 
     # First check if hook is already exsisting, GitHub would add a new one in
     # this case, not exactly what the API docs say but nevermind....
-    hooks = github.get(hooks_url).json()
+    try:
+        hooks = retry(github.get, hooks_url).json()
+    except:
+        return render_template('register.html',
+                               error='Cannot read webhooks on GitHub')
 
     url = urlparse(request.url)
     url = url.scheme + '://' + url.netloc + url_for('new')
 
     for h in hooks:
-        if h.get('config').get('url') == url:
+        h_url = h.get('config').get('url')
+        if h_url == url:
             print('Hook already exists on this repository')
             break
+
+        elif 'furiousfish' in h_url:  # Delete old/stale one(s)
+            github.delete(hooks_url + '/' + str(h.get('id')))
+            print('Deleting existing hook:', h_url)
+            continue
     else:
         payload = {'name'        : 'web',
                    'active'      : True,
