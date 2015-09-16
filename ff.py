@@ -204,26 +204,44 @@ def new():
     return jsonify(content), 200
 
 
+@app.route('/login')
+def login():
+    """Login/logout a user
+
+    We use GitHub authentication to login an already registered user.
+    Credentials are valid for the current session. We use the same
+    register + callback dance we use for a new user, but in this case we call
+    register() directly.
+    """
+    if 'oauth_token' in session:
+        session.pop('oauth_token')  # Logout now
+        return redirect(url_for('root'))
+
+    return register(True)
+
+
 @app.route('/register', methods=['GET', 'POST'])
-def register():
-    """Register a new user
+def register(login=None):
+    """Register/login a user
 
     Ask for the minimal info to activate the webhook on GitHub and to
-    login into fishtest, this is required to submit the test.
+    login into fishtest, this is required to submit the test. Alternatively,
+    if called with a login argument, then use GitHub for authentication.
     """
     error = ''
-    if request.method == 'POST':
-        user = request.form
-
+    user = None
+    if login or request.method == 'POST':
         # Fields are already half validated in the client, in particular
         # username and repo have been already verified against GitHub.
-        if UsersDB.query.filter_by(ft_username=user['ft_username']).first():
-            error = "Username already existing"
+        if not login:
+            user = request.form
+            if UsersDB.query.filter_by(ft_username=user['ft_username']).first():
+                error = "Username already existing"
 
-        elif not Fishtest().login(user['ft_username'], user['ft_password']):
-            error = "Cannot login into fishtest. Invalid password?"
+            elif not Fishtest().login(user['ft_username'], user['ft_password']):
+                error = "Cannot login into fishtest. Invalid password?"
 
-        else:
+        if not error:
             # Redirect to GitHub where user will be requested to authorize us
             # to set a webhook and then will be redirected to github_callback.
             github = OAuth2Session(app.config['GITHUB_CLIENT_ID'],
@@ -250,10 +268,8 @@ def set_hook():
     that is more complex than basic authentication but has the advantage that
     we don't need to know nor to request the GitHub user's password.
     """
-    user = session.get('user')
-
     # Check for spurious calls withouth any ongoing registartion
-    if not user or 'oauth_state' not in session:
+    if 'oauth_state' not in session:
         return 'You are not supposed to call us!', 404
 
     github = OAuth2Session(app.config['GITHUB_CLIENT_ID'], state=session['oauth_state'])
@@ -266,7 +282,21 @@ def set_hook():
                                error='Failed authorization on GitHub')
 
     # Everything went smooth, GitHub redirected the user here after he granted
-    # us authorized access, so let's proceed with setting the webhook.
+    # us authorized access, so in case of a login just return, otherwise
+    # proceed with setting the webhook.
+    session['oauth_token'] = oauth_token  # User is authenticated/logged in!
+    user = session.get('user')
+
+    # If it is a login authenticaton then retrieve user name
+    if not user:
+        user = retry(github.get, 'https://api.github.com/user').json()
+        user = UsersDB.query.filter_by(gh_username=user['login']).first()
+        if user:
+            session['user'] = {'gh_username' : user.gh_username}
+        else:
+            session.pop('oauth_token')  # Unkwown user, logout now
+        return redirect(url_for('root'))
+
     hooks_url = 'https://api.github.com/repos/'
     hooks_url = hooks_url + user['gh_username'] + '/' + user['repo'] + '/hooks'
 

@@ -17,6 +17,14 @@
     <div class="navbar-header">
       <h3>{% block header %}{% endblock %}</h3>
     </div>
+    <p class="navbar-text navbar-right">
+      {% if 'oauth_token' in session %}
+        {{ session['user'].get('gh_username') }}
+        <a href="{{ url_for('login') }}" class="navbar-link">Logout</a>
+      {% else %}
+        <a href="{{ url_for('login') }}" class="navbar-link">Login</a>
+      {% endif %}
+    </p>
   </div>
 </nav>
 
