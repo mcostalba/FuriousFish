@@ -10,6 +10,7 @@ import simplejson as json
 import requests
 import hmac
 import os
+import re
 
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
@@ -58,12 +59,12 @@ def find_bench(commits):
     Commits are ordered from oldest to newest, we return the bench number
     of the newest we find.
     """
+    p = r'^bench[:\s]*(\d+)'
     for c in reversed(commits):
-        msg = c['commit']['message'].upper()
-        if '\nBENCH:' in msg:
-            bench = msg.split('\nBENCH:', 1)[1].splitlines()[0].strip()
-            if bench.isdigit():
-                return bench
+        msg = c['commit']['message']
+        bench = re.search(p, msg, re.MULTILINE | re.IGNORECASE)
+        if bench:
+            return bench.group(1)
     return None
 
 
