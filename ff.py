@@ -33,11 +33,17 @@ class UsersDB(db.Model):
                             cascade='all, delete, delete-orphan',
                             backref=db.backref('user', lazy='joined'))
 
-    def __init__(self, ft_username, ft_password, gh_username, repo):
-        self.ft_username = ft_username
-        self.ft_password = ft_password
-        self.gh_username = gh_username
-        self.repo        = repo
+    def __init__(self, user):
+        self.ft_username = user['ft_username']
+        self.ft_password = user['ft_password']
+        self.gh_username = user['gh_username']
+        self.repo        = user['repo']
+
+    def to_dict(self):
+        return {'ft_username': self.ft_username,
+                'ft_password': self.ft_password,
+                'gh_username': self.gh_username,
+                'repo'       : self.repo}
 
 
 class TestsDB(db.Model):
@@ -245,7 +251,7 @@ def register(login=None):
             url = 'https://github.com/login/oauth/authorize'
             authorization_url, state = github.authorization_url(url)
 
-            # Pass user info to set_hook() callback through session object
+            # Pass user info to github_callback through session object
             session['user'] = user
             session['oauth_state'] = state
             return redirect(authorization_url)
@@ -256,7 +262,7 @@ def register(login=None):
 
 
 @app.route('/github_callback')
-def set_hook():
+def github_callback():
     """Create a webhook on GitHub
 
     Set a new webhook on GitHub that upon a push event on user repository makes
@@ -287,15 +293,26 @@ def set_hook():
 
     # If it is a login authenticaton then retrieve user name
     if not user:
-        user = retry(github.get, 'https://api.github.com/user').json()
-        user = UsersDB.query.filter_by(gh_username=user['login']).first()
+        req = retry(github.get, 'https://api.github.com/user').json()
+        user = UsersDB.query.filter_by(gh_username=req['login']).first()
         if user:
-            session['user'] = {'gh_username' : user.gh_username}
+            session['user'] = user.to_dict()
         else:
+            flash('Unkwown user: ' + req['login'], "error")
             session.pop('oauth_token')  # Logout now
-            flash('Unkwown user: ' + user.gh_username, "error")
         return redirect(url_for('root'))
 
+    # Otherwise in case of a registration of a new user set the webhook
+    elif not set_hook(github, user):
+        return render_template('register.html')
+
+    db.session.add(UsersDB(user))
+    db.session.commit()
+    flash('Congratulations! You have successfully completed your registration')
+    return redirect(url_for('root'))
+
+
+def set_hook(github, user):
     hooks_url = 'https://api.github.com/repos/'
     hooks_url = hooks_url + user['gh_username'] + '/' + user['repo'] + '/hooks'
 
@@ -305,7 +322,7 @@ def set_hook():
         hooks = retry(github.get, hooks_url).json()
     except:
         flash('Cannot read webhooks on GitHub', "error")
-        return render_template('register.html')
+        return False
 
     url = urlparse(request.url)
     url = url.scheme + '://' + url.netloc + url_for('new')
@@ -313,12 +330,10 @@ def set_hook():
     for h in hooks:
         h_url = h.get('config').get('url')
         if h_url == url:
-            print('Hook already exists on this repository')
             break
 
         elif 'furiousfish' in h_url:  # Delete old/stale one(s)
             github.delete(hooks_url + '/' + str(h.get('id')))
-            print('Deleting existing hook:', h_url)
             continue
     else:
         payload = {'name'        : 'web',
@@ -330,15 +345,11 @@ def set_hook():
                                     'secret': user['ft_password']}}
 
         r = github.post(hooks_url, data=json.dumps(payload)).json()
-
         if 'test_url' not in r:
             flash('Cannot set the webhook on GitHub', "error")
-            return render_template('register.html')
+            return False
 
-    db.session.add(UsersDB(**user))
-    db.session.commit()
-    flash('Congratulations! You have successfully completed your registration')
-    return redirect(url_for('root'))
+    return True
 
 
 if __name__ == '__main__':
