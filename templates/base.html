@@ -10,7 +10,17 @@
     <title>{% block title %}{% endblock %} - Furiousfish</title>
 </head>
 
-{% block alert %}{% endblock %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      {% set alert_type="alert-danger" if category=="error" else "alert-success" %}
+      <div class="alert {{ alert_type }} alert-dismissible" role="alert">
+        <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <strong>{{ message }}</strong>
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
 
 <nav class="navbar navbar-default">
   <div class="container-fluid">

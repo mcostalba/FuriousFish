@@ -1,4 +1,4 @@
-from flask import Flask, request, session, jsonify, render_template, redirect, url_for
+from flask import Flask, flash, request, session, jsonify, render_template, redirect, url_for
 from flask.ext.sqlalchemy import SQLAlchemy
 from sqlalchemy.sql.expression import func
 from requests_oauthlib import OAuth2Session
@@ -98,10 +98,6 @@ def retry(req, cmd):
 def root(username=None):
     """Show the list of submitted tests
     """
-    congrats = session.get('congrats')
-    if congrats:
-        session.pop('congrats')  # Show congratulations alert only once
-
     if username:
         tests = TestsDB.query.join(UsersDB).filter_by(ft_username=username)
     else:
@@ -109,8 +105,7 @@ def root(username=None):
 
     tests = tests.order_by(TestsDB.id.desc()).all()
     tests = [json.loads(str(e.data)) for e in tests]
-    return render_template('tests.html', tests=tests,
-                           username=username, congrats=congrats)
+    return render_template('tests.html', tests=tests, username=username)
 
 
 @app.route('/users')
@@ -254,8 +249,10 @@ def register(login=None):
             session['user'] = user
             session['oauth_state'] = state
             return redirect(authorization_url)
+        else:
+            flash(error, "error")
 
-    return render_template('register.html', error=error)
+    return render_template('register.html')
 
 
 @app.route('/github_callback')
@@ -279,8 +276,8 @@ def set_hook():
                                      authorization_response=request.url)
     session.pop('oauth_state')  # Don't leave behind a stale key
     if oauth_token is None:
-        return render_template('register.html',
-                               error='Failed authorization on GitHub')
+        flash('Failed authorization on GitHub', "error")
+        return render_template('register.html')
 
     # Everything went smooth, GitHub redirected the user here after he granted
     # us authorized access, so in case of a login just return, otherwise
@@ -295,7 +292,8 @@ def set_hook():
         if user:
             session['user'] = {'gh_username' : user.gh_username}
         else:
-            session.pop('oauth_token')  # Unkwown user, logout now
+            session.pop('oauth_token')  # Logout now
+            flash('Unkwown user: ' + user.gh_username, "error")
         return redirect(url_for('root'))
 
     hooks_url = 'https://api.github.com/repos/'
@@ -306,8 +304,8 @@ def set_hook():
     try:
         hooks = retry(github.get, hooks_url).json()
     except:
-        return render_template('register.html',
-                               error='Cannot read webhooks on GitHub')
+        flash('Cannot read webhooks on GitHub', "error")
+        return render_template('register.html')
 
     url = urlparse(request.url)
     url = url.scheme + '://' + url.netloc + url_for('new')
@@ -334,12 +332,12 @@ def set_hook():
         r = github.post(hooks_url, data=json.dumps(payload)).json()
 
         if 'test_url' not in r:
-            return render_template('register.html',
-                                   error='Cannot set the webhook on GitHub')
+            flash('Cannot set the webhook on GitHub', "error")
+            return render_template('register.html')
 
     db.session.add(UsersDB(**user))
     db.session.commit()
-    session['congrats'] = True
+    flash('Congratulations! You have successfully completed your registration')
     return redirect(url_for('root'))
 
 

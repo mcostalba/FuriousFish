@@ -4,15 +4,6 @@
 
 {% block header %}Registrer{% endblock %}
 
-{% block alert %}
-  {% if error %}
-    <div class="alert alert-danger alert-dismissible" role="alert">
-      <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-      <strong>Registration failed!</strong> {{ error }}
-    </div>
-  {% endif %}
-{% endblock %}
-
 {% block body %}
   <form method="POST">
     <div class="col-sm-8">
