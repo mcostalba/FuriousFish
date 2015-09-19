@@ -13,8 +13,10 @@
 {% with messages = get_flashed_messages(with_categories=true) %}
   {% if messages %}
     {% for category, message in messages %}
-      {% set alert_type="alert-danger" if category=="error" else "alert-success" %}
+      {% set alert_type="alert-success" if category=="ok" else "alert-danger" %}
+      {% set icon="glyphicon-ok" if category=="ok" else "glyphicon-exclamation-sign" %}
       <div class="alert {{ alert_type }} alert-dismissible" role="alert">
+        <span class="glyphicon {{ icon }}" aria-hidden="true"></span>
         <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
         <strong>{{ message }}</strong>
       </div>
@@ -22,14 +24,16 @@
   {% endif %}
 {% endwith %}
 
+{% set login=True if 'login' in session else False %}
+
 <nav class="navbar navbar-default">
   <div class="container-fluid">
     <div class="navbar-header">
       <h3>{% block header %}{% endblock %}</h3>
     </div>
     <p class="navbar-text navbar-right">
-      {% if 'oauth_token' in session %}
-        {{ session['user'].get('gh_username') }}
+      {% if login %}
+        {{ session['login']['user']['gh_username'] }}
         <a href="{{ url_for('login') }}" class="navbar-link">Logout</a>
       {% else %}
         <a href="{{ url_for('login') }}" class="navbar-link">Login</a>
@@ -41,6 +45,8 @@
 <body>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+    <link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/themes/smoothness/jquery-ui.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
 
     <div class="container-fluid">
       <div class="row">

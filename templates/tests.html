@@ -8,6 +8,7 @@
 <table class="table table-striped">
   <thead>
     <tr>
+      {% if login %}<th></th>{% endif %}
       <th>User</th>
       <th>Test</th>
       <th>Info</th>
@@ -16,7 +17,15 @@
   <tbody>
     {% for e in tests %}
     <tr>
-      <td class="col-xs-4 col-md-1"><a {{ 'href=' + url_for('root', username = e.get('ft_username')) }}>{{ e.get('ft_username') }}</a></td>
+      {% if login %}
+      <td class="col-xs-1 col-sm-1">
+        <button type="button" class="btn btn-default btn-xs">
+          <span class="glyphicon glyphicon-remove text-danger" aria-hidden="true"></span>
+        </button>
+      {% endif %}
+      <td class="col-xs-4 col-md-1">
+        <a {{ 'href=' + url_for('root', username = e.get('ft_username')) }}>{{ e.get('ft_username') }}</a>
+      </td>
       <td class="col-xs-8 col-md-3">
           <a href="http://tests.stockfishchess.org/tests/view/{{ e.get('test_id') }}" target="_blank">{{ e.get('ref') }}</a>
           <span class="pull-right">

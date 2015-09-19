@@ -119,6 +119,26 @@ def users():
     return render_template('users.html', users=users)
 
 
+@app.route('/delete/user')
+@app.route('/delete/user/<username>')
+def delete(username=None):
+    if username and 'login' in session:
+        user = UsersDB.query.filter_by(ft_username=username).first()
+        if not user:
+            flash("Unkown user " + username)
+
+        elif user.ft_username != session['login']['user']['ft_username']:
+            flash("You cannot delete another user")
+
+        else:
+            db.session.delete(user)
+            db.session.commit()
+            session.pop('login')  # Logout because user is deleted
+            flash("User " + username + " deleted!", "ok")
+
+    return ""
+
+
 @app.route('/new', methods=['POST'])
 def new():
     """Create a new test upon receiving a POST request from GitHub's webhook
@@ -209,12 +229,11 @@ def login():
     We use GitHub authentication to login an already registered user.
     Credentials are valid for the current session.
     """
-    if 'oauth_token' in session:
-        session.pop('user')
-        session.pop('oauth_token')  # Logout now
-        return redirect(url_for('root'))
+    if 'login' not in session:
+        return redirect(github_oauth())
 
-    return redirect(github_oauth())
+    session.pop('login')  # Logout now!
+    return redirect(url_for('root'))
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -229,10 +248,10 @@ def register():
         # username and repo have been already verified against GitHub.
         user = request.form
         if UsersDB.query.filter_by(ft_username=user['ft_username']).first():
-            flash("Username already existing", "error")
+            flash("Username already existing")
 
         elif not Fishtest().login(user['ft_username'], user['ft_password']):
-            flash("Cannot login into Fishtest. Invalid password?", "error")
+            flash("Cannot login into Fishtest. Invalid password?")
 
         else:
             session['user'] = user
@@ -276,22 +295,21 @@ def github_callback():
     client_id = app.config['GITHUB_CLIENT_ID']
     secret = app.config['GITHUB_CLIENT_SECRET']
     github = OAuth2Session(client_id, state=session['oauth_state'])
+    session.pop('oauth_state')  # Don't leave behind a stale key
     oauth_token = github.fetch_token(url,
                                      client_secret=secret,
                                      authorization_response=request.url)
-
-    session.pop('oauth_state')  # Don't leave behind a stale key
     if not oauth_token:
-        flash('Failed authorization on GitHub', "error")
+        flash('Failed authorization on GitHub')
 
-    elif not 'user' in session:
+    elif 'user' not in session:
         finalize_login(github, oauth_token)
 
     elif set_hook(github, session['user']):
         db.session.add(UsersDB(session['user']))
         db.session.commit()
-        session.pop('user')  #  We are not logged in
-        flash('Congratulations! You have completed your registration')
+        session.pop('user')
+        flash('Congratulations! You have completed your registration', 'ok')
 
     return redirect(url_for('root'))
 
@@ -306,10 +324,9 @@ def finalize_login(github, oauth_token):
     req = retry(github.get, 'https://api.github.com/user').json()
     user = UsersDB.query.filter_by(gh_username=req['login']).first()
     if user:
-        session['user'] = user.to_dict()
-        session['oauth_token'] = oauth_token  # User is logged in now!
+        session['login'] = {'user': user.to_dict(), 'oauth_token': oauth_token}
     else:
-        flash('Unkwown user: ' + req['login'], "error")
+        flash('Unkwown user: ' + req['login'])
 
 
 def set_hook(github, user):
@@ -323,12 +340,11 @@ def set_hook(github, user):
     try:
         hooks = retry(github.get, hooks_url).json()
 
-        url = urlparse(request.url)
-        url = url.scheme + '://' + url.netloc + url_for('new')
-
+        our_url = urlparse(request.url)
+        our_url = our_url.scheme + '://' + our_url.netloc + url_for('new')
         for h in hooks:
             h_url = h['config']['url']
-            if h_url == url:
+            if h_url == our_url:
                 break
 
             elif 'furiousfish' in h_url:  # Delete old/stale one(s)
@@ -339,16 +355,16 @@ def set_hook(github, user):
                        'active': True,
                        'events': ['push'],
                        'insecure_ssl': '1',
-                       'config': {'url': url,
+                       'config': {'url': our_url,
                                   'content_type': 'json',
                                   'secret': user['ft_password']}}
 
             r = github.post(hooks_url, data=json.dumps(payload)).json()
             if 'test_url' not in r:
-                flash('Cannot set the webhook on GitHub', "error")
+                flash('Cannot set the webhook on GitHub')
                 return False
     except:
-        flash('Error while accessing webhooks on GitHub', "error")
+        flash('Error while accessing webhooks on GitHub')
         return False
 
     return True
