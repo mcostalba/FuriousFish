@@ -59,6 +59,14 @@ class TestsDB(db.Model):
         self.user = user
 
 
+def retry(req, cmd):
+    """A simple wrapper around retry_call()
+
+    Avoid the caller to write all the retry parameters
+    """
+    return retry_call(req, [cmd], tries=3, delay=1, backoff=2)
+
+
 def find_bench(commits):
     """Find the first commit message with a bench number
 
@@ -79,24 +87,12 @@ def extract_info(msg):
 
     First look for text between {...} parenthesis after the @submit marker, if
     not found fallback on the commit title.
-
-    We assume the message has always a @submit marker.
     """
-    s = msg.split('\n@submit', 1)
-    info = [p.split('}')[0] for p in s[1].split('{') if '}' in p and s[1] != p]
-    if not info:
-        info = [p for p in s[0].splitlines() if p]
-        if not info:
-            return None
-    return info[0].strip()
-
-
-def retry(req, cmd):
-    """A simple wrap around retry_call()
-
-    Avoid the caller to write default parameters
-    """
-    return retry_call(req, [cmd], tries=3, delay=1, backoff=2)
+    for p in [r'^@submit\s*{\s*(.+?)\s*}', r'^\s*(.+?)\s*$.*?@submit']:
+        info = re.search(p, msg, re.MULTILINE | re.DOTALL)
+        if info:
+            return info.group(1)
+    return None
 
 
 @app.route('/')
@@ -135,26 +131,23 @@ def new():
     try:
         repo = data['repository']
         commit = data['head_commit']
-        content = {'ref'     : data['ref'].split('/')[-1],
-                   'ref_sha' : commit['id'],
-                   'repo_url': repo['html_url'],
-                   'master'  : 'master'}      # We assume base ref is master
+        msg = commit['message']
 
-        if '\n@submit' not in commit['message']:
+        if '\n@submit' not in msg:
             return 'Nothing to do here', 200  # Not an error
 
-        content['message'] = extract_info(commit['message'])
-        if not content['message']:
+        info = extract_info(msg)
+        if not info:
             return 'Missing valid test info', 404
 
-        content['gh_username'] = repo['owner']['name']
-        user = UsersDB.query.filter_by(gh_username=content['gh_username']).first()
+        owner = repo['owner']['name']
+        user = UsersDB.query.filter_by(gh_username=owner).first()
         if not user:
             return 'Unknown GitHub username', 404
 
         # Ensure request is from GitHub. Ideally we should check this as first
         # step, but user lookup should be already done when validating the
-        # signature with the ft_password. See 'validating payloads from github'.
+        # signature with ft_password. See 'validating payloads from github'.
         signature = request.headers.get('X-Hub-Signature')
         if signature:
             sha_name, signature = signature.split('=')
@@ -164,15 +157,13 @@ def new():
             mac = hmac.new(str(user.ft_password), msg=request.data, digestmod=sha1)
             if str(mac.hexdigest()) != str(signature):
                 return 'You are not GitHub!', 404
-            else:
-                print("Signature validated!!!")
 
         # Fetch until ExtraCnt commits before master to try hard to find
         # a functional change with corresponding bench number.
         ExtraCnt = 7
 
         cmd = repo['compare_url'].format(base='master~' + str(ExtraCnt + 1),
-                                         head=content['ref_sha'])
+                                         head=commit['id'])
 
         req = retry(requests.get, cmd).json()
 
@@ -185,21 +176,26 @@ def new():
         if not bench_head or not bench_base:
             return 'Cannot find bench numbers', 404
 
-        content['master_sha'] = commits[ExtraCnt].get('sha')
-        content['bench_head'] = bench_head
-        content['bench_base'] = bench_base
-        content['ft_username'] = user.ft_username
+        ft = Fishtest()
+        if not ft.login(user.ft_username, user.ft_password):
+            return 'Failed login to Fishtest', 404
+
+        content = {'ref': data['ref'].split('/')[-1],
+                   'ref_sha': commit['id'],
+                   'repo_url': repo['html_url'],
+                   'master': 'master',               # We assume base is master
+                   'master_sha': commits[ExtraCnt].get('sha'),
+                   'bench_head': bench_head,
+                   'bench_base': bench_base,
+                   'message': info,
+                   'ft_username': user.ft_username}  # To easy tests view page
+
+        content['test_id'], error = ft.submit_test(content)
+        if error:
+            return error, 404
 
     except KeyError as k:
         return 'Missing field: ' + k.message, 404
-
-    ft = Fishtest()
-    if not ft.login(content['ft_username'], user.ft_password):
-        return 'Failed login to Fishtest', 404
-
-    content['test_id'], error = ft.submit_test(content)
-    if error:
-        return error, 404
 
     db.session.add(TestsDB(json.dumps(content), user))
     db.session.commit()
@@ -211,143 +207,149 @@ def login():
     """Login/logout a user
 
     We use GitHub authentication to login an already registered user.
-    Credentials are valid for the current session. We use the same
-    register + callback dance we use for a new user, but in this case we call
-    register() directly.
+    Credentials are valid for the current session.
     """
     if 'oauth_token' in session:
+        session.pop('user')
         session.pop('oauth_token')  # Logout now
         return redirect(url_for('root'))
 
-    return register(True)
+    return redirect(github_oauth())
 
 
 @app.route('/register', methods=['GET', 'POST'])
-def register(login=None):
-    """Register/login a user
+def register():
+    """Register a new user
 
-    Ask for the minimal info to activate the webhook on GitHub and to
-    login into fishtest, this is required to submit the test. Alternatively,
-    if called with a login argument, then use GitHub for authentication.
+    Ask for the minimal info to activate the webhook on GitHub and to login
+    into fishtest, this is required to submit the test.
     """
-    error = ''
-    user = None
-    if login or request.method == 'POST':
+    if request.method == 'POST':
         # Fields are already half validated in the client, in particular
         # username and repo have been already verified against GitHub.
-        if not login:
-            user = request.form
-            if UsersDB.query.filter_by(ft_username=user['ft_username']).first():
-                error = "Username already existing"
+        user = request.form
+        if UsersDB.query.filter_by(ft_username=user['ft_username']).first():
+            flash("Username already existing", "error")
 
-            elif not Fishtest().login(user['ft_username'], user['ft_password']):
-                error = "Cannot login into fishtest. Invalid password?"
+        elif not Fishtest().login(user['ft_username'], user['ft_password']):
+            flash("Cannot login into Fishtest. Invalid password?", "error")
 
-        if not error:
-            # Redirect to GitHub where user will be requested to authorize us
-            # to set a webhook and then will be redirected to github_callback.
-            github = OAuth2Session(app.config['GITHUB_CLIENT_ID'],
-                                   scope=['admin:repo_hook'])
-            url = 'https://github.com/login/oauth/authorize'
-            authorization_url, state = github.authorization_url(url)
-
-            # Pass user info to github_callback through session object
-            session['user'] = user
-            session['oauth_state'] = state
-            return redirect(authorization_url)
         else:
-            flash(error, "error")
+            session['user'] = user
+            return redirect(github_oauth())
 
     return render_template('register.html')
 
 
+def github_oauth():
+    """ Authenticate with GitHub
+
+    Redirect to GitHub where user will be requested to authorize us and then he
+    will be redirected to github_callback. This is more complex than basic
+    authentication but has the advantage that we don't need to know nor to
+    request the GitHub user's password.
+
+    This function is called both for registering a new user and for signing in.
+
+    NOTE: For some reason the actual redirect() should be done at the calling
+    function. If done here nothing happens!
+    """
+    url = 'https://github.com/login/oauth/authorize'
+    client_id = app.config['GITHUB_CLIENT_ID']
+    github = OAuth2Session(client_id, scope=['admin:repo_hook'])
+    authorization_url, state = github.authorization_url(url)
+    session['oauth_state'] = state
+    return authorization_url
+
+
 @app.route('/github_callback')
 def github_callback():
+    """Finalize GitHub authentication
+
+    We are called from GitHub at the end of the OAuth process, after the user
+    has possibly authorized us.
+    """
+    if 'oauth_state' not in session:
+        return 'You are not supposed to call us!', 404
+
+    url = 'https://github.com/login/oauth/access_token'
+    client_id = app.config['GITHUB_CLIENT_ID']
+    secret = app.config['GITHUB_CLIENT_SECRET']
+    github = OAuth2Session(client_id, state=session['oauth_state'])
+    oauth_token = github.fetch_token(url,
+                                     client_secret=secret,
+                                     authorization_response=request.url)
+
+    session.pop('oauth_state')  # Don't leave behind a stale key
+    if not oauth_token:
+        flash('Failed authorization on GitHub', "error")
+
+    elif not 'user' in session:
+        finalize_login(github, oauth_token)
+
+    elif set_hook(github, session['user']):
+        db.session.add(UsersDB(session['user']))
+        db.session.commit()
+        session.pop('user')  #  We are not logged in
+        flash('Congratulations! You have completed your registration')
+
+    return redirect(url_for('root'))
+
+
+def finalize_login(github, oauth_token):
+    """Set the user as logged in
+
+    After a succesful authentication process, lookup the user in our DB and
+    change his state as logged in. OAuth2 is username agonstic, only after
+    validation we can ask GitHub for the actual username.
+    """
+    req = retry(github.get, 'https://api.github.com/user').json()
+    user = UsersDB.query.filter_by(gh_username=req['login']).first()
+    if user:
+        session['user'] = user.to_dict()
+        session['oauth_token'] = oauth_token  # User is logged in now!
+    else:
+        flash('Unkwown user: ' + req['login'], "error")
+
+
+def set_hook(github, user):
     """Create a webhook on GitHub
 
     Set a new webhook on GitHub that upon a push event on user repository makes
     a POST request to our new() function.
-
-    Creating a webhook requires authorized access. Here we use GitHub OAuth
-    that is more complex than basic authentication but has the advantage that
-    we don't need to know nor to request the GitHub user's password.
     """
-    # Check for spurious calls withouth any ongoing registartion
-    if 'oauth_state' not in session:
-        return 'You are not supposed to call us!', 404
-
-    github = OAuth2Session(app.config['GITHUB_CLIENT_ID'], state=session['oauth_state'])
-    oauth_token = github.fetch_token('https://github.com/login/oauth/access_token',
-                                     client_secret=app.config['GITHUB_CLIENT_SECRET'],
-                                     authorization_response=request.url)
-    session.pop('oauth_state')  # Don't leave behind a stale key
-    if oauth_token is None:
-        flash('Failed authorization on GitHub', "error")
-        return render_template('register.html')
-
-    # Everything went smooth, GitHub redirected the user here after he granted
-    # us authorized access, so in case of a login just return, otherwise
-    # proceed with setting the webhook.
-    session['oauth_token'] = oauth_token  # User is authenticated/logged in!
-    user = session.get('user')
-
-    # If it is a login authenticaton then retrieve user name
-    if not user:
-        req = retry(github.get, 'https://api.github.com/user').json()
-        user = UsersDB.query.filter_by(gh_username=req['login']).first()
-        if user:
-            session['user'] = user.to_dict()
-        else:
-            flash('Unkwown user: ' + req['login'], "error")
-            session.pop('oauth_token')  # Logout now
-        return redirect(url_for('root'))
-
-    # Otherwise in case of a registration of a new user set the webhook
-    elif not set_hook(github, user):
-        return render_template('register.html')
-
-    db.session.add(UsersDB(user))
-    db.session.commit()
-    flash('Congratulations! You have successfully completed your registration')
-    return redirect(url_for('root'))
-
-
-def set_hook(github, user):
     hooks_url = 'https://api.github.com/repos/'
     hooks_url = hooks_url + user['gh_username'] + '/' + user['repo'] + '/hooks'
-
-    # First check if hook is already exsisting, GitHub would add a new one in
-    # this case, not exactly what the API docs say but nevermind....
     try:
         hooks = retry(github.get, hooks_url).json()
+
+        url = urlparse(request.url)
+        url = url.scheme + '://' + url.netloc + url_for('new')
+
+        for h in hooks:
+            h_url = h['config']['url']
+            if h_url == url:
+                break
+
+            elif 'furiousfish' in h_url:  # Delete old/stale one(s)
+                github.delete(hooks_url + '/' + str(h['id']))
+                continue
+        else:
+            payload = {'name': 'web',
+                       'active': True,
+                       'events': ['push'],
+                       'insecure_ssl': '1',
+                       'config': {'url': url,
+                                  'content_type': 'json',
+                                  'secret': user['ft_password']}}
+
+            r = github.post(hooks_url, data=json.dumps(payload)).json()
+            if 'test_url' not in r:
+                flash('Cannot set the webhook on GitHub', "error")
+                return False
     except:
-        flash('Cannot read webhooks on GitHub', "error")
+        flash('Error while accessing webhooks on GitHub', "error")
         return False
-
-    url = urlparse(request.url)
-    url = url.scheme + '://' + url.netloc + url_for('new')
-
-    for h in hooks:
-        h_url = h.get('config').get('url')
-        if h_url == url:
-            break
-
-        elif 'furiousfish' in h_url:  # Delete old/stale one(s)
-            github.delete(hooks_url + '/' + str(h.get('id')))
-            continue
-    else:
-        payload = {'name'        : 'web',
-                   'active'      : True,
-                   'events'      : ['push'],
-                   'insecure_ssl': '1',
-                   'config'      : {'url': url,
-                                    'content_type': 'json',
-                                    'secret': user['ft_password']}}
-
-        r = github.post(hooks_url, data=json.dumps(payload)).json()
-        if 'test_url' not in r:
-            flash('Cannot set the webhook on GitHub', "error")
-            return False
 
     return True
 
