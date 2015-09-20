@@ -72,11 +72,8 @@
         }));
       }
 
-      // If fishtest username is empty set us as default value
-      if( !$( '#ft_username' ).val() ) {
-        $( '#ft_username' ).val( $( '#gh_username' ).val() );
-      }
-
+      sel.val('Stockfish').prop('selected', true);
+      $( '#ft_username' ).val( $( '#gh_username' ).val() );
    });
   </script>
 {% endblock %}

@@ -122,20 +122,17 @@ def users():
 @app.route('/delete/user')
 @app.route('/delete/user/<username>')
 def delete(username=None):
+    """Delete a regstered user
+    """
     if username and 'login' in session:
         user = UsersDB.query.filter_by(ft_username=username).first()
-        if not user:
-            flash("Unkown user " + username)
-
-        elif user.ft_username != session['login']['user']['ft_username']:
-            flash("You cannot delete another user")
-
-        else:
+        if user and username == session['login']['user']['ft_username']:
             db.session.delete(user)
             db.session.commit()
             session.pop('login')  # Logout because user is deleted
             flash("User " + username + " deleted!", "ok")
-
+        else:
+            flash("You cannot delete another user")
     return ""
 
 
@@ -229,11 +226,13 @@ def login():
     We use GitHub authentication to login an already registered user.
     Credentials are valid for the current session.
     """
+    next = urlparse(request.referrer).path  # Safe against external redirects
+
     if 'login' not in session:
-        return redirect(github_oauth())
+        return redirect(github_oauth(next))
 
     session.pop('login')  # Logout now!
-    return redirect(url_for('root'))
+    return redirect(next)
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -255,12 +254,12 @@ def register():
 
         else:
             session['user'] = user
-            return redirect(github_oauth())
+            return redirect(github_oauth(url_for('register')))
 
     return render_template('register.html')
 
 
-def github_oauth():
+def github_oauth(next):
     """ Authenticate with GitHub
 
     Redirect to GitHub where user will be requested to authorize us and then he
@@ -278,6 +277,7 @@ def github_oauth():
     github = OAuth2Session(client_id, scope=['admin:repo_hook'])
     authorization_url, state = github.authorization_url(url)
     session['oauth_state'] = state
+    session['next'] = next
     return authorization_url
 
 
@@ -288,7 +288,7 @@ def github_callback():
     We are called from GitHub at the end of the OAuth process, after the user
     has possibly authorized us.
     """
-    if 'oauth_state' not in session:
+    if 'oauth_state' not in session or 'next' not in session:
         return 'You are not supposed to call us!', 404
 
     url = 'https://github.com/login/oauth/access_token'
@@ -311,7 +311,9 @@ def github_callback():
         session.pop('user')
         flash('Congratulations! You have completed your registration', 'ok')
 
-    return redirect(url_for('root'))
+    next = session['next']
+    session.pop('next')
+    return redirect(next)
 
 
 def finalize_login(github, oauth_token):
