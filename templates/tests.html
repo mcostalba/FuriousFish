@@ -5,12 +5,23 @@
 {% block header %}Submitted tests{% endblock %}
 
 {% block body %}
+
+  <style>
+    .elo-results {
+      font-size:12px;
+      margin:2px;
+      padding:1px;
+      line-height:13px
+    }
+  </style>
+
 <table class="table table-striped">
   <thead>
     <tr>
       {% if login %}<th></th>{% endif %}
       <th>User</th>
       <th>Test</th>
+      <th>Result</th>
       <th>Info</th>
     </tr>
   </thead>
@@ -26,13 +37,20 @@
       <td class="col-xs-4 col-md-1">
         <a {{ 'href=' + url_for('root', username = e.get('ft_username')) }}>{{ e.get('ft_username') }}</a>
       </td>
-      <td class="col-xs-8 col-md-3">
+      <td class="col-xs-4 col-md-2">
           <a href="http://tests.stockfishchess.org/tests/view/{{ e.get('test_id') }}" target="_blank">{{ e.get('ref') }}</a>
           <span class="pull-right">
             <a href="{{ e.get('repo_url') }}/compare/{{ e.get('master_sha')[:10] }}...{{ e.get('ref_sha')[:10] }}" target="_blank">diff</a>
           </span>
       </td>
-      <td class="col-xs-10 col-md-8">{{ e.get('message') }}</td>
+      <td class="col-xs-4 col-md-3">
+        {% if e.get('result') %}
+        <pre class="elo-results">{{ e['result'] }}</pre>
+        {% else %}
+           ----
+        {% endif %}
+      </td>
+      <td class="col-xs-6 col-md-5">{{ e.get('message') }}</td>
     </tr>
     {% endfor %}
   </tbody>

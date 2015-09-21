@@ -122,7 +122,7 @@ def users():
 @app.route('/delete/user')
 @app.route('/delete/user/<username>')
 def delete(username=None):
-    """Delete a regstered user
+    """Delete a registered user
     """
     if username and 'login' in session:
         user = UsersDB.query.filter_by(ft_username=username).first()
@@ -134,6 +134,37 @@ def delete(username=None):
         else:
             flash("You cannot delete another user")
     return ""
+
+
+@app.route('/incoming', methods=['POST'])
+def incoming():
+    """Update test result
+
+       When a test finishes, Fishtest sends an email with the result to a
+       Google group that forwards it to its subscribers. Among them there is
+       an email address belonging to a webhook service that, upon receiving the
+       mail, forwards it here through a POST request. A bit complex but the
+       bottom line is we receive a timely update as soon as a test finishes and
+       we use this info to update the corresponding row in TestsDB.
+    """
+    try:
+        msg = request.get_json()['plain']
+        r = r'^TC.+D: \d+'
+        result = re.search(r, msg, re.MULTILINE | re.DOTALL).group(0)
+        p = r'^http://tests.stockfishchess.org/tests/view/(.+)'
+        test_id = re.search(p, msg).group(1)
+    except:
+        return 'Cannot parse message', 404
+
+    for t in TestsDB.query.filter(TestsDB.state != 'finished').all():
+        content = json.loads(t.data)
+        if content['test_id'] == test_id:
+            content['result'] = result
+            t.data = json.dumps(content)
+            t.state = 'finished'
+            db.session.commit()
+
+    return 'ok', 200
 
 
 @app.route('/new', methods=['POST'])
@@ -211,8 +242,8 @@ def new():
         if error:
             return error, 404
 
-    except KeyError as k:
-        return 'Missing field: ' + k.message, 404
+    except (KeyError, TypeError) as e:
+        return 'Missing field: ' + e.message, 404
 
     db.session.add(TestsDB(json.dumps(content), user))
     db.session.commit()
@@ -254,7 +285,7 @@ def register():
 
         else:
             session['user'] = user
-            return redirect(github_oauth(url_for('register')))
+            return redirect(github_oauth(url_for('users')))
 
     return render_template('register.html')
 
