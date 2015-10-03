@@ -73,7 +73,7 @@ def find_bench(commits):
     Commits are ordered from oldest to newest, we return the bench number
     of the newest we find.
     """
-    p = r'^bench[:\s]*(\d+)'
+    p = r'^[\s]*bench[:\s]*(\d+)'
     for c in reversed(commits):
         msg = c['commit']['message']
         bench = re.search(p, msg, re.MULTILINE | re.IGNORECASE)
@@ -149,10 +149,13 @@ def incoming():
     """
     try:
         msg = request.get_json()['plain']
-        r = r'^TC.+D: \d+'
-        result = re.search(r, msg, re.MULTILINE | re.DOTALL).group(0)
         p = r'^http://tests.stockfishchess.org/tests/view/(.+)'
         test_id = re.search(p, msg).group(1)
+        r = r'^TC.+D: \d+'
+        result = re.search(r, msg, re.MULTILINE | re.DOTALL)
+        if not result:
+            return 'Nothing to do', 200  # Different kind of test
+        result = result.group(0)
     except:
         return 'Cannot parse message', 404
 
@@ -257,7 +260,10 @@ def login():
     We use GitHub authentication to login an already registered user.
     Credentials are valid for the current session.
     """
-    next = urlparse(request.referrer).path  # Safe against external redirects
+    if request.referrer:
+        next = urlparse(request.referrer).path  # No external redirects
+    else:
+        next = url_for('root')
 
     if 'login' not in session:
         return redirect(github_oauth(next))
