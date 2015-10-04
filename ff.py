@@ -5,7 +5,7 @@ from requests_oauthlib import OAuth2Session
 from retry.api import retry_call
 from urlparse import urlparse
 from hashlib import sha1
-from fishtest import Fishtest
+from fishtest import Fishtest, FishtestError
 import simplejson as json
 import requests
 import hmac
@@ -228,8 +228,7 @@ def new():
             return 'Cannot find bench numbers', 404
 
         ft = Fishtest()
-        if not ft.login(user.ft_username, user.ft_password):
-            return 'Failed login to Fishtest', 404
+        ft.login(user.ft_username, user.ft_password)
 
         content = {'ref': data['ref'].split('/')[-1],
                    'ref_sha': commit['id'],
@@ -241,12 +240,12 @@ def new():
                    'message': info,
                    'ft_username': user.ft_username}  # To easy tests view page
 
-        content['test_id'], error = ft.submit_test(content)
-        if error:
-            return error, 404
+        content['test_id'] = ft.submit_test(content)
 
     except (KeyError, TypeError) as e:
         return 'Missing field: ' + e.message, 404
+    except FishtestError as e:
+        return 'Fishtest: ' + e.message, 404
 
     db.session.add(TestsDB(json.dumps(content), user))
     db.session.commit()

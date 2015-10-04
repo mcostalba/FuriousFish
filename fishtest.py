@@ -3,6 +3,10 @@ from retry import retry
 import re
 
 
+class FishtestError(Exception):
+    pass
+
+
 class Fishtest():
 
     def __init__(self):
@@ -15,11 +19,9 @@ class Fishtest():
         Try to login with passed credentials, upon success we receive the
         'new test' form and keep it in self.browser for later submit.
         """
-        br = self.browser
-        br.open('http://tests.stockfishchess.org/tests/run')
-
-        # Mechanize fails loudly if a field is not found
         try:
+            br = self.browser
+            br.open('http://tests.stockfishchess.org/tests/run')
             br.select_form(nr=0)
             br["username"] = username
             br["password"] = password
@@ -31,8 +33,9 @@ class Fishtest():
             br["test_type"]
 
         except ControlNotFoundError:
-            return False
-        return True
+            raise FishtestError('Failed login to Fishtest')
+        except:
+            raise FishtestError('Error while accessing Fishtest')
 
     @retry(tries=3, delay=1, backoff=2)
     def submit_test(self, content):
@@ -49,27 +52,29 @@ class Fishtest():
                'message'   : 'run-info'}
 
         if not all(k in content.keys() for k in map.keys()):
-            return None, 'Fishtest: map error'
+            raise FishtestError('Map error')
 
-        br = self.browser
         try:
+            br = self.browser
             for k in map.keys():
                 br[map[k]] = content[k]
 
-        except ControlNotFoundError:
-            return None, 'Fishtest: missing fields in test submit form'
+            data = br.submit().get_data()  # Here we go!
 
-        data = br.submit().get_data()  # Here we go!
+        except ControlNotFoundError:
+            raise FishtestError('Missing fields in test submit form')
+        except:
+            raise FishtestError('Error while submitting test')
 
         # After a successful submit, Fishtest returns the main tests view.
         # Look for the newly created test there and return the test id.
         p = r'<a href="/tests/view/(\w+)">{ref}</a>.*?/compare/{master}\.\.\.{sha}'
-        p = p.format(ref   =content['ref'],
+        p = p.format(ref=content['ref'],
                      master=content['master_sha'][:7],
-                     sha   =content['ref_sha'][:7])
+                     sha=content['ref_sha'][:7])
 
         test_id = re.search(p, data, re.MULTILINE | re.DOTALL)
         if not test_id:
-            return None, 'Fishtest: unable to find test_id'
+            raise FishtestError('Unable to find test_id')
 
-        return test_id.group(1), None
+        return test_id.group(1)
